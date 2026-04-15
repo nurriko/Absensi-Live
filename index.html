@@ -18,7 +18,6 @@
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     
     <style>
-        /* === TEMA GLOBAL === */
         :root {
             --font-main: 'Plus Jakarta Sans', sans-serif;
             --primary: #5a67d8; --primary-hover: #4c51bf; --accent: #f43f5e;
@@ -97,7 +96,7 @@
         th { text-align: left; padding: 12px 15px; border-bottom: 2px solid var(--glass-border); color: var(--text-dim); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px;}
         td { padding: 12px 15px; border-bottom: 1px solid var(--glass-border); font-size: 0.85rem; vertical-align: middle; }
         .img-preview { width: 40px; height: 40px; object-fit: cover; border-radius: 8px; cursor: pointer; transition: 0.3s; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: inline-block; margin-right: 5px;}
-        .img-preview:hover { transform: scale(1.15); position: relative; z-index: 10; }
+        .img-preview:hover { transform: scale(1.15); position: relative; z-index: 10; box-shadow: 0 4px 10px rgba(0,0,0,0.2);}
         
         .badge { background: var(--glass-border); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; display: inline-block; text-align: center; }
         .badge-success { background: rgba(16, 185, 129, 0.15); color: #059669; border: 1px solid rgba(16, 185, 129, 0.3); }
@@ -168,9 +167,12 @@
         <h2>Dashboard Host</h2>
         <p style="text-align: center; color: var(--text-dim); margin-bottom: 25px; font-size:0.95rem;">Halo, <span id="hostNameDisplay" style="color: var(--primary); font-weight: 800;"></span> 👋</p>
         
-        <div style="background: var(--input-bg); border: 1px solid var(--glass-border); padding: 12px 15px; border-radius: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
-            <div style="font-weight: 600; color: var(--text-dim); font-size:0.85rem;">Target Live Anda:</div>
-            <div style="font-weight: 800; color: var(--primary); font-size: 1rem;" id="hostTargetDisplay">Belum diatur</div>
+        <div style="background: var(--input-bg); border: 1px solid var(--glass-border); padding: 15px; border-radius: 12px; margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="font-weight: 600; color: var(--text-dim); font-size:0.85rem;">Target Mingguan:</div>
+                <div style="font-weight: 800; color: var(--primary); font-size: 1rem;" id="hostTargetDisplay">Belum diatur</div>
+            </div>
+            <div id="hostProgressDisplay" style="text-align: right; margin-top: 5px; font-size: 0.8rem; font-weight: 600;"></div>
         </div>
 
         <div id="startSection">
@@ -328,8 +330,8 @@
     let data = []; let resetRequests = []; let filteredDataCache = []; let timerInterval;
     window.sessionImages = {};
 
-    onValue(ref(db, 'users'), (s) => { if(s.exists()) users = s.val(); if(!document.getElementById('adminPage').classList.contains('hidden')) { renderDaftarUser(); renderAnalisaTarget(); updateFilterCheckboxes(); updateGrafikDropdown(); }});
-    onValue(ref(db, 'absensi_data'), (s) => { if(s.exists()) data = s.val(); else data = []; if(!document.getElementById('adminPage').classList.contains('hidden')) { window.applyFilters(); renderAnalisaTarget(); window.updateGrafik(); } if(!document.getElementById('hostPage').classList.contains('hidden')) renderHistory();});
+    onValue(ref(db, 'users'), (s) => { if(s.exists()) users = s.val(); if(!document.getElementById('adminPage').classList.contains('hidden')) { renderDaftarUser(); renderAnalisaTarget(); updateFilterCheckboxes(); updateGrafikDropdown(); } if(!document.getElementById('hostPage').classList.contains('hidden')) { window.updateHostProgress(); }});
+    onValue(ref(db, 'absensi_data'), (s) => { if(s.exists()) data = s.val(); else data = []; if(!document.getElementById('adminPage').classList.contains('hidden')) { window.applyFilters(); renderAnalisaTarget(); window.updateGrafik(); } if(!document.getElementById('hostPage').classList.contains('hidden')) { renderHistory(); window.updateHostProgress(); }});
     onValue(ref(db, 'reset_requests'), (s) => { if(s.exists()) resetRequests = s.val(); else resetRequests = []; if(!document.getElementById('adminPage').classList.contains('hidden')) renderResetRequests();});
 
     const sync = () => { set(ref(db, 'users'), users); set(ref(db, 'absensi_data'), data); set(ref(db, 'reset_requests'), resetRequests); };
@@ -352,11 +354,41 @@
         if(!user) return Swal.fire({icon:'error',text:'Nama atau password salah!'});
         localStorage.setItem('activeUser', u);
         if(user.r === 'admin') { window.nav('adminPage'); initAdmin(); }
-        else { document.getElementById('hostNameDisplay').innerText = u; document.getElementById('hostTargetDisplay').innerText = (user.targetMingguan || 0) > 0 ? `${user.targetMingguan} Jam/Mgg` : "Belum diatur"; window.nav('hostPage'); checkActiveSession(); renderHistory(); document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; }
+        else { 
+            document.getElementById('hostNameDisplay').innerText = u; 
+            window.updateHostProgress();
+            window.nav('hostPage'); checkActiveSession(); renderHistory(); document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; 
+        }
     }
     window.ajukanReset = function() { const u = document.getElementById('forgotUsername').value.trim(); if(!u) return; if(!users.find(x => x.u === u)) return Swal.fire({icon:'error',text:'Nama tidak ditemukan!'}); if(!resetRequests.includes(u)) { resetRequests.push(u); sync(); } Swal.fire({icon:'success',title:'Terkirim',timer:1500,showConfirmButton:false}).then(()=>window.nav('loginPage')); }
     window.logout = function() { localStorage.removeItem('activeUser'); clearInterval(timerInterval); window.nav('loginPage'); }
 
+    window.updateHostProgress = function() {
+        const u = localStorage.getItem('activeUser'); if(!u) return;
+        const user = users.find(x => x.u === u);
+        const tM = user ? (user.targetMingguan || 0) : 0;
+        const tD = document.getElementById('hostTargetDisplay'), pD = document.getElementById('hostProgressDisplay');
+        
+        if(tM > 0) {
+            tD.innerText = `${tM} Jam / Mgg`;
+            const wR = getWeekRange();
+            const dM = data.filter(d => d.host === u && d.timestamp >= wR.start && d.timestamp <= wR.end).reduce((s, c) => s + c.detik, 0);
+            const jM = (dM / 3600).toFixed(1);
+            const sisa = (tM - parseFloat(jM)).toFixed(1);
+
+            if(sisa > 0) {
+                pD.innerHTML = `⚠️ Kurang <span style="color:var(--accent); font-weight:800;">${sisa} Jam</span> lagi minggu ini`;
+                pD.style.color = "var(--warning)";
+            } else {
+                pD.innerHTML = `✅ Target Minggu Ini Tercapai! (${jM} Jam)`;
+                pD.style.color = "#10b981";
+            }
+        } else {
+            tD.innerText = "Belum diatur"; pD.innerHTML = "";
+        }
+    }
+
+    // --- HOST MULTI PLATFORM ---
     window.updateHostPlatText = function() { const c = document.querySelectorAll('.host-plat-cb:checked'); const tE = document.getElementById('hostPlatSelectedText'); if(c.length === 0) tE.innerText = "Pilih Platform..."; else if(c.length === 1) tE.innerText = c[0].value; else tE.innerText = Array.from(c).map(cb => cb.value).join(', '); }
     
     function checkActiveSession() { const u = localStorage.getItem('activeUser'), sess = JSON.parse(localStorage.getItem('sess_' + u)); if(sess) { document.getElementById('startSection').classList.add('hidden'); document.getElementById('liveSection').classList.remove('hidden'); startTimer(sess.start); renderUploadZones(sess.plats); } else { document.getElementById('startSection').classList.remove('hidden'); document.getElementById('liveSection').classList.add('hidden'); } }
@@ -405,7 +437,8 @@
         const end = Date.now(), detik = Math.floor((end - sess.start) / 1000);
         
         data.push({ id: Date.now() + Math.random(), host: u, plat: sess.plats.join(', '), timestamp: sess.start, tgl: new Date(sess.start).toLocaleDateString('en-CA'), mulai: new Date(sess.start).toLocaleTimeString('en-GB'), akhir: new Date(end).toLocaleTimeString('en-GB'), detik: detik, totalGmv: totalGmvAccumulated, platformsData: platformsData });
-        sync(); localStorage.removeItem('sess_'+u); clearInterval(timerInterval); window.sessionImages = {}; document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; Swal.fire({icon:'success',title:'Disimpan!'}); checkActiveSession(); renderHistory();
+        sync(); localStorage.removeItem('sess_'+u); clearInterval(timerInterval); window.sessionImages = {}; document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; 
+        Swal.fire({icon:'success',title:'Disimpan!'}); checkActiveSession(); renderHistory(); window.updateHostProgress();
     }
 
     window.lihatFoto = function(imgSrc) { Swal.fire({ imageUrl: imgSrc, imageAlt: 'Bukti SS', showConfirmButton: false, width: 'auto', padding: '1em', background: 'transparent', backdrop: 'rgba(0,0,0,0.85)' }); }
@@ -432,8 +465,6 @@
                                     session.totalGmv = session.platformsData.reduce((s, p) => s + p.gmv, 0);
                                 } else { session.img = base64Img; session.gmv = newGmv; session.totalGmv = newGmv; }
                                 sync(); Swal.fire('Tersimpan', 'Foto dan GMV berhasil diupdate.', 'success');
-                                if(!document.getElementById('hostPage').classList.contains('hidden')) renderHistory();
-                                if(!document.getElementById('adminPage').classList.contains('hidden')) window.applyFilters();
                             }
                         }
                     });
@@ -442,21 +473,13 @@
         }; input.click();
     }
 
-    // --- FIX HAPUS RIWAYAT (Memperbaiki Pengecekan ID) ---
+    // --- FIX HAPUS RIWAYAT (String Comparison) ---
     window.hapusRiwayat = function(id) { 
         Swal.fire({title:'Hapus Data Riwayat?', text: "Sesi ini akan dihapus permanen.", icon:'warning',showCancelButton:true,confirmButtonColor:'#e11d48'}).then((r)=>{ 
             if(r.isConfirmed){ 
                 data = data.filter(x => String(x.id) !== String(id)); 
                 sync(); 
                 Swal.fire('Terhapus!','Data berhasil dihapus.','success'); 
-                
-                if(!document.getElementById('adminPage').classList.contains('hidden')) {
-                    window.applyFilters(); 
-                    renderAnalisaTarget();
-                    window.updateGrafik();
-                } else {
-                    renderHistory();
-                }
             } 
         }); 
     }
@@ -478,6 +501,7 @@
         });
     }
 
+    // --- ADMIN LOGIC ---
     function initAdmin() { renderResetRequests(); renderDaftarUser(); renderAnalisaTarget(); updateFilterCheckboxes(); window.applyFilters(); }
     function renderResetRequests() { const s = document.getElementById('adminResetSection'), b = document.getElementById('resetReqBody'); if(resetRequests.length===0) s.classList.add('hidden'); else { s.classList.remove('hidden'); b.innerHTML=''; resetRequests.forEach(u => b.innerHTML+=`<tr><td>${u}</td><td><button onclick="berikanPasswordBaru('${u}')" class="btn-primary" style="padding:6px 12px; width:auto; font-size:0.8rem;">Reset Sandi</button></td></tr>`); } }
     function renderAnalisaTarget() {
@@ -503,7 +527,7 @@
 
     window.downloadTemplateExcel = async function() {
         const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('Data Upload');
-        ws.columns = [ {header:'Username Host',key:'h',width:25}, {header:'Tanggal (YYYY-MM-DD)',key:'t',width:25}, {header:'Platform',key:'p',width:20}, {header:'Jam Mulai (HH:mm:ss)',key:'m',width:25}, {header:'Jam Selesai (HH:mm:ss)',key:'a',width:25}, {header:'GMV (Rp)',key:'g',width:20} ];
+        ws.columns = [ {header:'Username Host',key:'h',width:25}, {header:'Tanggal (YYYY-MM-DD)',key:'t',width:25}, {header:'Platform',key:'p',width:20}, {header:'Jam Mulai (HH:mm:ss)',key:'m',width:25}, {header:'Jam Selesai (HH:mm:ss)',key:'a',width:25}, {header:'GMV Total (Rp)',key:'g',width:20} ];
         ws.getRow(1).font={bold:true, color:{argb:'FFFFFFFF'}}; ws.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF3B82F6'}};
         ws.addRow({h:'Riko',t:'2026-04-01',p:'TikTok, Shopee',m:'10:00:00',a:'12:30:00',g:1500000});
         const buf = await wb.xlsx.writeBuffer(); saveAs(new Blob([buf]), `Template_Upload_Manual.xlsx`);
@@ -516,10 +540,10 @@
             if(jD.length===0) return Swal.fire('Error','Excel kosong.','error');
             let b = 0; const dI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=";
             jD.forEach(r => {
-                const h = r['Username Host']||r['h'], t = r['Tanggal (YYYY-MM-DD)']||r['t'], p = r['Platform']||r['p'], m = r['Jam Mulai (HH:mm:ss)']||r['m'], a = r['Jam Selesai (HH:mm:ss)']||r['a'], g = parseInt(r['GMV (Rp)'] || r['g'] || 0);
+                const h = r['Username Host']||r['h'], t = r['Tanggal (YYYY-MM-DD)']||r['t'], p = r['Platform']||r['p'], m = r['Jam Mulai (HH:mm:ss)']||r['m'], a = r['Jam Selesai (HH:mm:ss)']||r['a'], g = parseInt(r['GMV Total (Rp)'] || r['g'] || 0);
                 if(h&&t&&p&&m&&a) {
                     const sT = new Date(`${t}T${m}`).getTime(), eT = new Date(`${t}T${a}`).getTime();
-                    if(!isNaN(sT)&&!isNaN(eT)) { data.push({ id:Date.now()+Math.random(), host:h, plat:p, timestamp:sT, tgl:t, mulai:m, akhir:a, detik:Math.floor((eT-sT)/1000), img:dI, gmv:g }); b++; }
+                    if(!isNaN(sT)&&!isNaN(eT)) { data.push({ id:Date.now()+Math.random(), host:h, plat:p, timestamp:sT, tgl:t, mulai:m, akhir:a, detik:Math.floor((eT-sT)/1000), img:dI, totalGmv:g }); b++; }
                 }
             });
             if(b>0){ sync(); fI.value=''; Swal.fire('Sukses!',`${b} baris ditambahkan.`,'success'); } else Swal.fire('Gagal','Tidak ada baris valid.','error');
@@ -593,12 +617,12 @@
     }
 
     window.applyFilters = function() {
-        const hC = Array.from(document.querySelectorAll('.host-cb:checked')).map(cb=>cb.value);
-        const pC = Array.from(document.querySelectorAll('.plat-cb:checked')).map(cb=>cb.value);
+        const hCbs = Array.from(document.querySelectorAll('.host-cb:checked')).map(cb=>cb.value);
+        const pCbs = Array.from(document.querySelectorAll('.plat-cb:checked')).map(cb=>cb.value);
         const sD = document.getElementById('filterStartDate').value, eD = document.getElementById('filterEndDate').value;
         
         let baseData = data.filter(i => {
-            const mH = hC.length === 0 || hC.includes(i.host);
+            const mH = hCbs.length === 0 || hCbs.includes(i.host);
             let mD = true;
             if(sD && i.timestamp < new Date(sD).setHours(0,0,0,0)) mD = false;
             if(eD && i.timestamp > new Date(eD).setHours(23,59,59,999)) mD = false;
@@ -609,13 +633,13 @@
         baseData.forEach(x => {
             if(x.platformsData && x.platformsData.length > 0) {
                 x.platformsData.forEach(pd => {
-                    if(pC.length === 0 || pC.includes(pd.plat)) {
+                    if(pCbs.length === 0 || pCbs.includes(pd.plat)) {
                         window.flattenedFilteredData.push({ ...x, plat: pd.plat, gmvDisplay: pd.gmv, imgDisplay: pd.img });
                     }
                 });
             } else {
                 const platsArr = x.plat.split(',').map(s => s.trim());
-                const matchedPlats = pC.length === 0 ? platsArr : platsArr.filter(p => pC.includes(p));
+                const matchedPlats = pCbs.length === 0 ? platsArr : platsArr.filter(p => pCbs.includes(p));
                 matchedPlats.forEach(m => {
                     window.flattenedFilteredData.push({ ...x, plat: m, gmvDisplay: x.totalGmv !== undefined ? x.totalGmv : (x.gmv || 0), imgDisplay: x.img });
                 });
@@ -647,7 +671,7 @@
             ws.getRow(rIdx).height=55; ws.getRow(rIdx).alignment={vertical:'middle',horizontal:'left'}; ws.getCell(`F${rIdx}`).numFmt = '"Rp "* #,##0'; 
             
             if(x.imgDisplay && x.imgDisplay.length>100) { 
-                try { const imgId = wb.addImage({base64:x.imgDisplay.split(',')[1],extension:'png'}); ws.addImage(imgId, {tl:{col:7,row:rIdx-1},ext:{width:50,height:50}}); }catch(e){} 
+                try { const imgId = wb.addImage({base64:x.imgDisplay.split(',')[1],extension:'png'}); ws.addImage(imgId, {tl:{col:8,row:rIdx-1},ext:{width:50,height:50}}); }catch(e){} 
             } else ws.getCell(`H${rIdx}`).value = "Manual";
         });
         ws.eachRow(row=>row.eachCell(cell=>cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}}));
