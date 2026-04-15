@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Absensi Host Live</title>
+    <title>Absensi Host Live - V16</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,145 +11,123 @@
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> 
     
     <style>
-        /* === TEMA GELAP (DEFAULT) === */
+        /* === TEMA GLOBAL === */
         :root {
             --font-main: 'Plus Jakarta Sans', sans-serif;
-            --primary: #6366f1;
-            --primary-hover: #4f46e5;
-            --accent: #f43f5e;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --bg-body: #0f172a;
-            --bg-gradient: radial-gradient(circle at top left, #1e1b4b, #0f172a);
-            --glass-bg: rgba(30, 41, 59, 0.7);
-            --glass-border: rgba(255, 255, 255, 0.08);
-            --text-main: #f8fafc;
-            --text-dim: #94a3b8;
-            --input-bg: rgba(15, 23, 42, 0.6);
-            --card-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            --primary: #5a67d8; --primary-hover: #4c51bf; --accent: #f43f5e;
+            --success: #10b981; --warning: #f59e0b; --info: #3b82f6;
+            --bg-body: #0f172a; --bg-gradient: radial-gradient(circle at top left, #1e1b4b, #0f172a);
+            --glass-bg: rgba(30, 41, 59, 0.7); --glass-border: rgba(255, 255, 255, 0.08);
+            --text-main: #f8fafc; --text-dim: #94a3b8;
+            --input-bg: rgba(15, 23, 42, 0.6); --card-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
         }
 
-        /* === TEMA TERANG (SIANG) === */
         body.light-mode {
-            --primary: #4f46e5;
-            --primary-hover: #4338ca;
-            --bg-body: #f8fafc;
-            --bg-gradient: radial-gradient(circle at top left, #ffffff, #f1f5f9);
-            --glass-bg: rgba(255, 255, 255, 0.85);
-            --glass-border: rgba(0, 0, 0, 0.05);
-            --text-main: #0f172a;
-            --text-dim: #475569;
-            --input-bg: rgba(255, 255, 255, 0.9);
-            --card-shadow: 0 20px 40px rgba(0, 0, 0, 0.05);
+            --primary: #5a67d8; --primary-hover: #4c51bf;
+            --bg-body: #f4f7f6; --bg-gradient: radial-gradient(circle at top left, #ffffff, #e2e8f0);
+            --glass-bg: rgba(255, 255, 255, 0.95); --glass-border: rgba(0, 0, 0, 0.05);
+            --text-main: #1a202c; --text-dim: #4a5568;
+            --input-bg: #ffffff; --card-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
         }
 
-        body {
-            font-family: var(--font-main); background: var(--bg-gradient); background-color: var(--bg-body);
-            background-attachment: fixed; color: var(--text-main); margin: 0; padding: 20px;
-            min-height: 100vh; display: flex; justify-content: center; transition: background 0.5s ease, color 0.5s ease;
-        }
-
+        body { font-family: var(--font-main); background: var(--bg-gradient); background-color: var(--bg-body); background-attachment: fixed; color: var(--text-main); margin: 0; padding: 20px; min-height: 100vh; display: flex; justify-content: center; transition: all 0.5s ease; font-size: 0.95rem;}
         * { box-sizing: border-box; }
-
-        /* Custom Font untuk Notifikasi SweetAlert */
-        .swal2-popup { font-family: var(--font-main) !important; border-radius: 24px !important; }
-
-        .theme-toggle {
-            position: fixed; top: 20px; right: 20px; width: 50px; height: 50px;
-            background: var(--glass-bg); border: 1px solid var(--glass-border);
-            color: var(--text-main); border-radius: 50%; cursor: pointer; backdrop-filter: blur(12px); z-index: 1000;
-            display: flex; align-items: center; justify-content: center; font-size: 1.5rem; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
+        .swal2-popup { font-family: var(--font-main) !important; border-radius: 16px !important; font-size: 0.9rem !important;}
+        
+        .theme-toggle { position: fixed; top: 20px; right: 20px; width: 45px; height: 45px; background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-main); border-radius: 50%; cursor: pointer; backdrop-filter: blur(12px); z-index: 1000; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: 0.3s; }
         .theme-toggle:hover { transform: scale(1.1) rotate(15deg); }
 
-        .container { width: 100%; max-width: 1100px; margin-top: 50px; perspective: 1000px; }
+        .container { width: 100%; max-width: 1000px; margin-top: 10px; perspective: 1000px; }
+        
+        /* Layout Admin Baru (Sidebar + Content) */
+        .admin-layout { display: flex; gap: 20px; width: 100%; max-width: 1300px; margin: 0 auto; align-items: flex-start; }
+        
+        /* SIDEBAR LOGIC */
+        .sidebar { width: 240px; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 20px; padding: 25px 15px; backdrop-filter: blur(16px); position: sticky; top: 20px; transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), padding 0.4s; overflow: hidden; }
+        .sidebar.minimized { width: 75px; padding: 25px 10px; }
+        .sidebar.minimized .menu-text, .sidebar.minimized .admin-title-text { display: none; opacity: 0; }
+        
+        .toggle-sidebar-btn { background: transparent; border: none; color: var(--primary); font-size: 1.3rem; cursor: pointer; padding: 0; transition: 0.3s; }
+        .toggle-sidebar-btn:hover { color: var(--primary-hover); transform: scale(1.1); }
+        
+        .sidebar-menu { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+        .sidebar-menu li { padding: 12px 15px; border-radius: 12px; cursor: pointer; font-weight: 600; color: var(--text-dim); transition: 0.3s; border: 1px solid transparent; display: flex; align-items: center; gap: 12px; white-space: nowrap; font-size: 0.9rem;}
+        .menu-icon { font-size: 1.1rem; }
+        .sidebar-menu li:hover { background: rgba(99, 102, 241, 0.05); color: var(--primary); }
+        .sidebar-menu li.active { background: rgba(90, 103, 216, 0.1); color: var(--primary); box-shadow: none; border: 1px solid rgba(90, 103, 216, 0.2);}
+        
+        .sidebar.minimized .sidebar-menu li { justify-content: center; padding: 12px 0;}
+        .sidebar.minimized #logoutBtn { padding: 12px 0; justify-content: center; display: flex; }
+        
+        .admin-content { flex: 1; transition: width 0.4s ease; min-width: 0; }
 
-        .card {
-            background: var(--glass-bg); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-            border: 1px solid var(--glass-border); border-radius: 28px; padding: 45px;
-            box-shadow: var(--card-shadow); margin-bottom: 25px; opacity: 0; transition: all 0.3s ease;
-        }
-
-        h2, h3 { text-align: center; color: var(--primary); margin-top: 0; letter-spacing: -0.5px;}
-        h2 { font-size: 2.2rem; font-weight: 800; background: linear-gradient(135deg, #818cf8, #f472b6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 35px; }
-
-        .form-group { margin-bottom: 22px; }
-        label { display: block; margin-bottom: 10px; font-size: 0.95rem; color: var(--text-dim); font-weight: 600;}
-
-        input, select {
-            width: 100%; padding: 16px 20px; background: var(--input-bg);
-            border: 1.5px solid var(--glass-border); border-radius: 16px;
-            color: var(--text-main); font-size: 1rem; font-family: var(--font-main); transition: all 0.3s ease;
-        }
-        input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15); background: var(--glass-bg); }
-
-        button {
-            width: 100%; padding: 16px; border-radius: 16px; border: none;
-            font-weight: 700; font-family: var(--font-main); letter-spacing: 0.5px;
-            cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); font-size: 1rem;
-        }
-        .btn-primary { background: linear-gradient(135deg, var(--primary), #818cf8); color: white; margin-bottom: 12px; }
-        .btn-primary:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(99, 102, 241, 0.5); }
-        .btn-outline { background: transparent; border: 1.5px solid var(--glass-border); color: var(--text-dim); }
+        .card { background: var(--glass-bg); backdrop-filter: blur(16px); border: 1px solid var(--glass-border); border-radius: 20px; padding: 30px; box-shadow: var(--card-shadow); margin-bottom: 20px; opacity: 0; transition: 0.3s; }
+        
+        h2, h3 { text-align: left; color: var(--text-main); margin-top: 0; letter-spacing: -0.3px;}
+        h2 { font-size: 1.6rem; font-weight: 800; color: var(--primary); margin-bottom: 20px; text-align: center;}
+        h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 15px;}
+        
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 6px; font-size: 0.85rem; color: var(--text-dim); font-weight: 600;}
+        input, select { width: 100%; padding: 10px 14px; background: var(--input-bg); border: 1px solid var(--glass-border); border-radius: 10px; color: var(--text-main); font-size: 0.9rem; font-family: var(--font-main); transition: 0.3s; }
+        input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(90, 103, 216, 0.15); }
+        
+        button { width: 100%; padding: 12px 15px; border-radius: 10px; border: none; font-weight: 700; font-family: var(--font-main); cursor: pointer; transition: 0.3s; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 8px;}
+        .btn-primary { background: var(--primary); color: white; margin-bottom: 10px; }
+        .btn-primary:hover { background: var(--primary-hover); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(90, 103, 216, 0.3); }
+        .btn-outline { background: transparent; border: 1px solid var(--glass-border); color: var(--text-dim); }
         .btn-outline:hover { background: var(--glass-border); color: var(--text-main); }
         .btn-danger { background: var(--accent); color: white; }
         .btn-success { background: var(--success); color: white; }
         .btn-warning { background: var(--warning); color: white; }
-        .btn-info { background: #3b82f6; color: white; }
+        .btn-info { background: var(--info); color: white; }
 
-        .link-text { color: var(--primary); text-decoration: none; cursor: pointer; font-size: 0.9rem; text-align: center; display: block; margin-top: 20px; font-weight: 600;}
-
-        .filter-box {
-            background: rgba(0,0,0,0.03); padding: 25px; border-radius: 20px; margin-bottom: 30px;
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; border: 1px solid var(--glass-border);
-        }
+        .link-text { color: var(--primary); text-decoration: none; cursor: pointer; font-size: 0.85rem; text-align: center; display: block; margin-top: 15px; font-weight: 600;}
         
         .custom-select-wrapper { position: relative; user-select: none; }
-        .custom-select-trigger {
-            width: 100%; padding: 16px 20px; background: var(--input-bg);
-            border: 1.5px solid var(--glass-border); border-radius: 16px;
-            color: var(--text-main); font-size: 1rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center;
-        }
-        .custom-options {
-            position: absolute; display: none; top: 100%; left: 0; right: 0; margin-top: 8px;
-            background: var(--glass-bg); border: 1px solid var(--glass-border);
-            border-radius: 16px; box-shadow: var(--card-shadow); z-index: 99;
-            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-            max-height: 200px; overflow-y: auto; padding: 10px;
-        }
-        .custom-options.open { display: block; animation: fadeInDown 0.3s ease forwards;}
-        
-        .checkbox-list { display: flex; flex-direction: column; gap: 8px; }
-        .checkbox-list label { display: flex; align-items: center; gap: 10px; font-weight: 500; margin:0; cursor: pointer; color: var(--text-main); padding: 8px 12px; border-radius: 8px; transition: 0.2s; }
+        .custom-select-trigger { width: 100%; padding: 10px 14px; background: var(--input-bg); border: 1px solid var(--glass-border); border-radius: 10px; color: var(--text-main); font-size: 0.9rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .custom-options { position: absolute; display: none; top: 100%; left: 0; right: 0; margin-top: 5px; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 10px; box-shadow: var(--card-shadow); z-index: 99; backdrop-filter: blur(16px); max-height: 200px; overflow-y: auto; padding: 8px; }
+        .custom-options.open { display: block; animation: fadeInDown 0.2s ease forwards;}
+        .checkbox-list { display: flex; flex-direction: column; gap: 4px; }
+        .checkbox-list label { display: flex; align-items: center; gap: 8px; font-weight: 500; margin:0; cursor: pointer; color: var(--text-main); padding: 6px 10px; border-radius: 6px; transition: 0.2s; font-size: 0.85rem;}
         .checkbox-list label:hover { background: var(--glass-border); }
-        .checkbox-list input[type="checkbox"] { width: 18px; height: 18px; margin:0; accent-color: var(--primary); }
+        .checkbox-list input[type="checkbox"] { width: 14px; height: 14px; margin:0; accent-color: var(--primary); }
 
-        .table-container { overflow-x: auto; margin-top: 15px; margin-bottom: 30px; border-radius: 20px; background: rgba(0,0,0,0.02); border: 1px solid var(--glass-border); }
-        table { width: 100%; border-collapse: collapse; min-width: 650px; }
-        th { text-align: left; padding: 18px; border-bottom: 2px solid var(--glass-border); color: var(--text-dim); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;}
-        td { padding: 18px; border-bottom: 1px solid var(--glass-border); font-size: 0.95rem; vertical-align: middle; }
+        .table-container { overflow-x: auto; margin-top: 10px; margin-bottom: 25px; border-radius: 12px; background: var(--input-bg); border: 1px solid var(--glass-border); }
+        table { width: 100%; border-collapse: collapse; min-width: 600px; }
+        th { text-align: left; padding: 12px 15px; border-bottom: 2px solid var(--glass-border); color: var(--text-dim); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px;}
+        td { padding: 12px 15px; border-bottom: 1px solid var(--glass-border); font-size: 0.85rem; vertical-align: middle; }
+        .img-preview { width: 40px; height: 40px; object-fit: cover; border-radius: 8px; cursor: pointer; transition: 0.3s; box-shadow: 0 2px 5px rgba(0,0,0,0.1);}
+        .img-preview:hover { transform: scale(1.2); }
         
+        .badge { background: var(--glass-border); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; display: inline-block; text-align: center; }
+        .badge-success { background: rgba(16, 185, 129, 0.15); color: #059669; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .badge-danger { background: rgba(244, 63, 94, 0.15); color: #e11d48; border: 1px solid rgba(244, 63, 94, 0.3); }
+        .badge-info { background: rgba(59, 130, 246, 0.15); color: #2563eb; border: 1px solid rgba(59, 130, 246, 0.3); }
+
         .hidden { display: none !important; }
-        .img-preview { width: 55px; height: 55px; object-fit: cover; border-radius: 12px; cursor: pointer; transition: 0.3s; box-shadow: 0 4px 10px rgba(0,0,0,0.1);}
-        .img-preview:hover { transform: scale(1.15); }
-        
-        .badge { background: var(--glass-border); padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; display: inline-block; text-align: center; }
-        .badge-success { background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.5); }
-        .badge-danger { background: rgba(244, 63, 94, 0.2); color: #f43f5e; border: 1px solid rgba(244, 63, 94, 0.5); }
-        .badge-info { background: rgba(59, 130, 246, 0.2); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.5); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fade 0.4s ease; }
+        @keyframes fade { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
-        .live-status { display: flex; flex-direction: column; align-items: center; padding: 40px; border-radius: 24px; background: rgba(244, 63, 94, 0.08); margin: 25px 0; border: 1px solid rgba(244, 63, 94, 0.2);}
-        .pulse { width: 18px; height: 18px; background: var(--accent); border-radius: 50%; animation: pulse-red 2s infinite; margin-bottom: 15px; }
-        @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.7); } 70% { box-shadow: 0 0 0 20px rgba(244, 63, 94, 0); } 100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); } }
+        /* Chart Canvas Size & Styling */
+        .chart-wrapper { background: var(--input-bg); border: 1px solid var(--glass-border); border-radius: 16px; padding: 20px; margin-bottom: 25px;}
+        canvas { width: 100% !important; height: 220px !important; }
 
-        @media (max-width: 768px) {
-            .card { padding: 30px 20px; } .filter-box { grid-template-columns: 1fr; }
-            .btn-group { flex-direction: column !important; } .btn-group button { margin-left: 0 !important; margin-bottom: 10px; width: 100% !important;}
+        .info-box { background: rgba(59, 130, 246, 0.1); border-left: 4px solid var(--info); padding: 15px; border-radius: 10px; margin-bottom: 20px; color: var(--text-dim); line-height: 1.5; font-size: 0.85rem;}
+
+        @media (max-width: 900px) {
+            .admin-layout { flex-direction: column; gap: 15px;}
+            .sidebar { width: 100% !important; position: relative; top: 0; margin-bottom: 10px; display: flex; flex-direction: row; overflow-x: auto; padding: 10px;}
+            .sidebar-menu { flex-direction: row; gap: 5px; width: max-content; }
+            .admin-content { width: 100% !important; }
+            .sidebar .admin-title-text, .toggle-sidebar-btn { display: none !important; }
         }
     </style>
 </head>
@@ -157,17 +135,11 @@
 
 <div class="theme-toggle" id="themeBtn" onclick="toggleTheme()" title="Ganti Tema">☀️</div>
 
-<div class="container">
+<div class="container" id="mainContainer">
     <div id="loginPage" class="card">
         <h2>Absensi Host Live</h2>
-        <div class="form-group">
-            <label>Username (Nama)</label>
-            <input type="text" id="loginUsername" placeholder="Masukkan nama Anda...">
-        </div>
-        <div class="form-group">
-            <label>Password</label>
-            <input type="password" id="loginPassword" placeholder="••••••••">
-        </div>
+        <div class="form-group"><label>Username (Nama)</label><input type="text" id="loginUsername" placeholder="Masukkan nama Anda..."></div>
+        <div class="form-group"><label>Password</label><input type="password" id="loginPassword" placeholder="••••••••"></div>
         <button class="btn-primary" onclick="login()">Masuk</button>
         <button class="btn-outline" onclick="nav('registerPage')">Daftar Host Baru</button>
         <a class="link-text" onclick="nav('forgotPage')">Lupa Password?</a>
@@ -175,183 +147,179 @@
 
     <div id="registerPage" class="card hidden">
         <h2>Pendaftaran Host</h2>
-        <div class="form-group">
-            <label>Username (Isi dengan Nama Anda)</label>
-            <input type="text" id="regUsername" placeholder="Contoh: Riko">
-        </div>
-        <div class="form-group">
-            <label>Buat Password</label>
-            <input type="password" id="regPassword" placeholder="Buat password yang mudah diingat">
-        </div>
-        <button class="btn-primary" onclick="register()">Daftar Sekarang</button>
-        <button class="btn-outline" onclick="nav('loginPage')">Kembali ke Login</button>
+        <div class="form-group"><label>Username (Isi dengan Nama Anda)</label><input type="text" id="regUsername" placeholder="Contoh: Riko"></div>
+        <div class="form-group"><label>Password</label><input type="password" id="regPassword" placeholder="Buat password..."></div>
+        <button class="btn-primary" onclick="register()">Daftar</button><button class="btn-outline" onclick="nav('loginPage')">Kembali</button>
     </div>
 
     <div id="forgotPage" class="card hidden">
         <h2>Reset Password</h2>
-        <p style="text-align:center; color:var(--text-dim); margin-bottom:20px;">Permintaan reset akan dikirim ke Admin.</p>
-        <div class="form-group">
-            <label>Username (Nama) Anda</label>
-            <input type="text" id="forgotUsername" placeholder="Ketik nama Anda...">
-        </div>
-        <button class="btn-warning" onclick="ajukanReset()">Kirim Permintaan</button>
-        <button class="btn-outline" onclick="nav('loginPage')" style="margin-top:10px;">Kembali</button>
+        <p style="text-align:center; color:var(--text-dim); margin-bottom:15px; font-size:0.85rem;">Permintaan reset akan dikirim ke Admin.</p>
+        <div class="form-group"><label>Username Anda</label><input type="text" id="forgotUsername" placeholder="Ketik nama Anda..."></div>
+        <button class="btn-warning" onclick="ajukanReset()">Kirim Permintaan</button><button class="btn-outline" onclick="nav('loginPage')" style="margin-top:10px;">Kembali</button>
     </div>
 
     <div id="hostPage" class="card hidden">
         <h2>Dashboard Host</h2>
-        <p style="text-align: center; color: var(--text-dim); margin-bottom: 30px;">Halo, <span id="hostNameDisplay" style="color: var(--primary); font-weight: 800;"></span> 👋</p>
+        <p style="text-align: center; color: var(--text-dim); margin-bottom: 25px; font-size:0.95rem;">Halo, <span id="hostNameDisplay" style="color: var(--primary); font-weight: 800;"></span> 👋</p>
         
-        <div style="background: var(--input-bg); border: 1px solid var(--glass-border); padding: 15px 20px; border-radius: 16px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center;">
-            <div style="font-weight: 600; color: var(--text-dim);">Target Live Anda:</div>
-            <div style="font-weight: 800; color: var(--primary); font-size: 1.1rem;" id="hostTargetDisplay">Belum diatur</div>
+        <div style="background: var(--input-bg); border: 1px solid var(--glass-border); padding: 12px 15px; border-radius: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-weight: 600; color: var(--text-dim); font-size:0.85rem;">Target Live Anda:</div>
+            <div style="font-weight: 800; color: var(--primary); font-size: 1rem;" id="hostTargetDisplay">Belum diatur</div>
         </div>
 
         <div id="startSection">
             <div class="form-group">
-                <label>Platform Live</label>
-                <select id="platform">
-                    <option value="" disabled selected>Pilih Platform...</option>
-                    <option value="TikTok">TikTok</option>
-                    <option value="Shopee">Shopee</option>
-                    <option value="Instagram">Instagram</option>
-                </select>
+                <label>Platform Live (Bisa pilih lebih dari 1)</label>
+                <div class="custom-select-wrapper">
+                    <div class="custom-select-trigger" onclick="toggleDropdown('hostPlatDropdown')">
+                        <span id="hostPlatSelectedText">Pilih Platform...</span> <span>▼</span>
+                    </div>
+                    <div class="custom-options" id="hostPlatDropdown">
+                        <div class="checkbox-list">
+                            <label><input type="checkbox" class="host-plat-cb" value="TikTok" onchange="updateHostPlatText()"> TikTok</label>
+                            <label><input type="checkbox" class="host-plat-cb" value="Shopee" onchange="updateHostPlatText()"> Shopee</label>
+                            <label><input type="checkbox" class="host-plat-cb" value="Instagram" onchange="updateHostPlatText()"> Instagram</label>
+                        </div>
+                    </div>
+                </div>
             </div>
             <button class="btn-primary" onclick="mulai()">▶ Mulai Live</button>
         </div>
 
         <div id="liveSection" class="hidden">
-            <div class="live-status">
-                <div class="pulse"></div>
-                <div style="font-weight: 800; color: var(--accent);">LIVE BERJALAN</div>
-                <div id="timerDisplay" style="font-size: 2.5rem; margin-top: 15px; font-weight:800; font-variant-numeric: tabular-nums;">00:00:00</div>
+            <div style="display: flex; flex-direction: column; align-items: center; padding: 30px; border-radius: 16px; background: rgba(244, 63, 94, 0.05); margin: 20px 0; border: 1px solid rgba(244, 63, 94, 0.15);">
+                <div style="width: 14px; height: 14px; background: var(--accent); border-radius: 50%; animation: pulse-red 2s infinite; margin-bottom: 10px;"></div>
+                <div style="font-weight: 800; color: var(--accent); font-size:0.9rem;">LIVE BERJALAN</div>
+                <div id="timerDisplay" style="font-size: 2rem; margin-top: 10px; font-weight:800; font-variant-numeric: tabular-nums;">00:00:00</div>
             </div>
-            <div class="form-group">
-                <label>Upload Bukti SS (Wajib)</label>
-                <input type="file" id="screenshot" accept="image/*">
-            </div>
+            <div class="form-group"><label>Upload Bukti SS (Wajib)</label><input type="file" id="screenshot" accept="image/*"></div>
             <button class="btn-danger" onclick="selesai()">⏹ Akhiri Live</button>
         </div>
 
-        <h3 style="margin-top: 40px; text-align:left;">Riwayat Sesi Live Anda</h3>
+        <h3 style="margin-top: 30px;">Riwayat Sesi Live Anda</h3>
         <div class="table-container">
             <table>
-                <thead>
-                    <tr><th>Tanggal</th><th>Waktu Live</th><th>Platform</th><th>Durasi</th><th>Bukti</th></tr>
-                </thead>
+                <thead><tr><th>Tanggal</th><th>Waktu Live</th><th>Platform</th><th>Durasi</th><th>Bukti</th></tr></thead>
                 <tbody id="historyBody"></tbody>
             </table>
         </div>
-        <button class="btn-outline" onclick="logout()" style="margin-top: 10px;">Keluar</button>
+        <button class="btn-outline" onclick="logout()" style="margin-top: 5px;">Keluar</button>
+    </div>
+</div> 
+
+<div id="adminPage" class="admin-layout hidden">
+    <div class="sidebar" id="adminSidebar">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 30px; justify-content: flex-start; padding-left: 2px;">
+            <button class="toggle-sidebar-btn" onclick="toggleSidebar()" title="Minimize/Maximize Sidebar">☰</button>
+            <div class="admin-title-text">
+                <h3 style="color: var(--primary); font-weight: 800; margin:0; font-size: 1.1rem; line-height:1.1;">Admin Panel</h3>
+                <span style="font-size: 0.75rem; color: var(--text-dim); font-weight:500;">Absensi Host</span>
+            </div>
+        </div>
+        
+        <ul class="sidebar-menu">
+            <li id="menu-utama" class="active" onclick="switchAdminTab('utama')" title="Dashboard Utama">
+                <span class="menu-icon">📊</span> <span class="menu-text">Dashboard Utama</span>
+            </li>
+            <li id="menu-grafik" onclick="switchAdminTab('grafik')" title="Grafik Analitik Target">
+                <span class="menu-icon">📈</span> <span class="menu-text">Grafik Target</span>
+            </li>
+            <li id="menu-upload" onclick="switchAdminTab('upload')" title="Upload Data Manual">
+                <span class="menu-icon">📤</span> <span class="menu-text">Upload Manual</span>
+            </li>
+        </ul>
+        <button class="btn-danger" id="logoutBtn" style="margin-top: 40px; font-size: 0.85rem;" onclick="logout()" title="Keluar Akun">
+            <span class="menu-icon">🚪</span> <span class="menu-text">Keluar Akun</span>
+        </button>
     </div>
 
-    <div id="adminPage" class="card hidden" style="max-width: 100%; width: 100%;">
-        <h2>Panel Administrator</h2>
+    <div class="admin-content card" style="margin-top: 0; opacity: 1;">
         
-        <div id="adminResetSection" class="hidden" style="margin-bottom: 40px;">
-            <h3 style="color:var(--warning); text-align:left;">⚠️ Permintaan Reset Password</h3>
+        <div id="tab-utama" class="tab-content active">
+            
+            <div id="adminResetSection" class="hidden" style="margin-bottom: 25px;">
+                <h3 style="color:var(--warning);">⚠️ Permintaan Reset Password</h3>
+                <div class="table-container"><table><tbody id="resetReqBody"></tbody></table></div>
+            </div>
+
+            <h3 style="display:flex; align-items:center; gap:8px; margin-top: 5px;"><span style="font-size:1.2rem;">🎯</span> Analisa Rekapan Target</h3>
+            <div class="table-container" style="border: 1px solid rgba(16, 185, 129, 0.3);">
+                <table>
+                    <thead><tr><th>Host</th><th>T. Mingguan</th><th>Prog. Minggu</th><th>Status Mgg</th><th>T. Bulanan</th><th>Prog. Bulan</th><th>Status Bln</th></tr></thead>
+                    <tbody id="analisaTargetBody"></tbody>
+                </table>
+            </div>
+
+            <h3 style="margin-top: 25px;">Daftar Akun & Setting Target</h3>
+            <div class="table-container">
+                <table><thead><tr><th>Username</th><th>Target Aktif</th><th>Kelola Data</th></tr></thead><tbody id="userListBody"></tbody></table>
+            </div>
+
+            <h3 style="margin-top: 25px;">Filter & Export Rekapan Seluruh Host</h3>
+            <div style="background: rgba(0,0,0,0.02); padding: 15px 20px; border-radius: 12px; margin-bottom: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; border: 1px solid var(--glass-border);">
+                <div><label>Filter Host:</label><div class="custom-select-wrapper"><div class="custom-select-trigger" onclick="toggleDropdown('hostDropdown')"><span id="hostSelectedText">Semua Host</span> <span>▼</span></div><div class="custom-options" id="hostDropdown"><div class="checkbox-list" id="filterHostList"></div></div></div></div>
+                <div><label>Filter Platform:</label><div class="custom-select-wrapper"><div class="custom-select-trigger" onclick="toggleDropdown('platDropdown')"><span id="platSelectedText">Semua Platform</span> <span>▼</span></div><div class="custom-options" id="platDropdown"><div class="checkbox-list"><label><input type="checkbox" class="plat-cb" value="TikTok" onchange="updatePlatText()"> TikTok</label><label><input type="checkbox" class="plat-cb" value="Shopee" onchange="updatePlatText()"> Shopee</label><label><input type="checkbox" class="plat-cb" value="Instagram" onchange="updatePlatText()"> Instagram</label></div></div></div></div>
+                <div><label>Tgl Mulai:</label><input type="date" id="filterStartDate"></div>
+                <div><label>Tgl Akhir:</label><input type="date" id="filterEndDate"></div>
+                <div style="grid-column: 1 / -1; display:flex; gap:10px; margin-top:5px;">
+                    <button class="btn-primary" onclick="applyFilters()" style="margin:0;">Cari Data</button>
+                    <button class="btn-success" onclick="exportExcelFull()" style="margin:0;">📥 Download Excel</button>
+                    <button class="btn-outline" onclick="resetFilter()" style="margin:0;">Reset Filter</button>
+                </div>
+            </div>
+
             <div class="table-container">
                 <table>
-                    <thead><tr><th>Username</th><th>Aksi</th></tr></thead>
-                    <tbody id="resetReqBody"></tbody>
+                    <thead><tr><th>Host</th><th>Tgl</th><th>Platform</th><th>Jam Mulai</th><th>Selesai</th><th>Durasi</th><th>Bukti</th><th>Aksi</th></tr></thead>
+                    <tbody id="adminAbsensiBody"></tbody>
                 </table>
             </div>
         </div>
 
-        <h3 style="text-align:left; display:flex; align-items:center; gap:10px; margin-top: 20px;">
-            <span style="font-size:1.5rem;">🎯</span> Analisa Pencapaian Target Host
-        </h3>
-        <p style="color:var(--text-dim); margin-top:-10px; margin-bottom:20px; font-size:0.9rem;">Analisis otomatis dihitung berdasarkan rekapan jam live di minggu dan bulan berjalan ini.</p>
-        <div class="table-container" style="border: 1px solid rgba(16, 185, 129, 0.3);">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Username Host</th>
-                        <th>Target Mingguan</th>
-                        <th>Progress Minggu Ini</th>
-                        <th style="text-align:center;">Status Mgg</th>
-                        <th>Target Bulanan</th>
-                        <th>Progress Bulan Ini</th>
-                        <th style="text-align:center;">Status Bln</th>
-                    </tr>
-                </thead>
-                <tbody id="analisaTargetBody"></tbody>
-            </table>
-        </div>
-
-        <h3 style="text-align:left; margin-top: 40px;">Daftar Akun & Setting Target</h3>
-        <div class="table-container">
-            <table>
-                <thead><tr><th>Username</th><th>Target Terkini</th><th>Kelola Data</th></tr></thead>
-                <tbody id="userListBody"></tbody>
-            </table>
-        </div>
-
-        <h3 style="text-align:left; margin-top: 40px;">Filter & Export Rekapan</h3>
-        <div class="filter-box">
-            <div class="form-group" style="margin:0;">
-                <label>Filter Host:</label>
-                <div class="custom-select-wrapper">
-                    <div class="custom-select-trigger" onclick="toggleDropdown('hostDropdown')">
-                        <span id="hostSelectedText">Semua Host</span> <span>▼</span>
-                    </div>
-                    <div class="custom-options" id="hostDropdown">
-                        <div class="checkbox-list" id="filterHostList"></div>
-                    </div>
-                </div>
+        <div id="tab-grafik" class="tab-content">
+            <h3 style="margin-bottom: 20px;">Grafik Analitik Performa</h3>
+            <div class="form-group" style="max-width: 300px; margin-bottom: 25px;">
+                <label>Pilih Host untuk dianalisis:</label>
+                <select id="grafikHostSelect" onchange="updateGrafik()"></select>
             </div>
 
-            <div class="form-group" style="margin:0;">
-                <label>Filter Platform:</label>
-                <div class="custom-select-wrapper">
-                    <div class="custom-select-trigger" onclick="toggleDropdown('platDropdown')">
-                        <span id="platSelectedText">Semua Platform</span> <span>▼</span>
-                    </div>
-                    <div class="custom-options" id="platDropdown">
-                        <div class="checkbox-list">
-                            <label><input type="checkbox" class="plat-cb" value="TikTok" onchange="updatePlatText()"> TikTok</label>
-                            <label><input type="checkbox" class="plat-cb" value="Shopee" onchange="updatePlatText()"> Shopee</label>
-                            <label><input type="checkbox" class="plat-cb" value="Instagram" onchange="updatePlatText()"> Instagram</label>
-                        </div>
-                    </div>
-                </div>
+            <div class="chart-wrapper">
+                <h3 style="margin-bottom: 15px; font-size: 0.95rem; color: var(--text-dim);">📈 Tren Jam Live Harian (Bulan Ini)</h3>
+                <div style="position: relative; height: 220px; width: 100%;"><canvas id="dailyLineChart"></canvas></div>
             </div>
 
-            <div class="form-group" style="margin:0;"><label>Tgl Mulai:</label><input type="date" id="filterStartDate"></div>
-            <div class="form-group" style="margin:0;"><label>Tgl Akhir:</label><input type="date" id="filterEndDate"></div>
-
-            <div class="btn-group" style="grid-column: 1 / -1; display:flex; gap:12px; margin-top:10px;">
-                <button class="btn-primary" onclick="applyFilters()" style="margin:0; flex:1;">Cari</button>
-                <button class="btn-success" onclick="exportExcelFull()" style="margin:0; flex:1;">📥 Excel</button>
-                <button class="btn-outline" onclick="resetFilter()" style="margin:0; flex:1;">Reset</button>
+            <div class="chart-wrapper">
+                <h3 style="margin-bottom: 15px; font-size: 0.95rem; color: var(--text-dim);">📊 Perbandingan Pencapaian Target</h3>
+                <div style="position: relative; height: 220px; width: 100%;"><canvas id="targetBarChart"></canvas></div>
             </div>
         </div>
 
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Host</th><th>Tgl</th><th>Platform</th>
-                        <th>Jam Mulai</th><th>Jam Selesai</th>
-                        <th>Durasi</th><th>Bukti SS</th>
-                    </tr>
-                </thead>
-                <tbody id="adminAbsensiBody"></tbody>
-            </table>
+        <div id="tab-upload" class="tab-content">
+            <h3 style="margin-bottom: 20px;">Upload Data Manual (Backdate)</h3>
+            <div class="info-box">
+                <strong>📝 Informasi Penting:</strong> Fitur ini digunakan untuk memasukkan data rekapan *live* masa lalu.<br>
+                1. Download format Template Excel di bawah ini.<br>
+                2. Isi data sesuai kolom yang disediakan secara akurat.<br>
+                3. Upload file Excel tersebut.
+            </div>
+
+            <button class="btn-success" style="max-width: 250px; margin-bottom: 25px;" onclick="downloadTemplateExcel()">📥 Download Format Template</button>
+
+            <div style="background: var(--input-bg); border: 2px dashed var(--primary); border-radius: 16px; padding: 30px 15px; text-align: center; margin-bottom: 15px;">
+                <h3 style="margin-bottom: 15px; font-size: 1rem;">Upload File Excel (.xlsx)</h3>
+                <input type="file" id="manualUploadFile" accept=".xlsx, .xls" style="max-width: 350px; margin: 0 auto; display: block; border: none; padding: 0;">
+                <button class="btn-primary" style="max-width: 250px; margin: 15px auto 0;" onclick="prosesUploadManual()">📤 Proses ke Database</button>
+            </div>
         </div>
 
-        <div style="display:flex; justify-content: flex-end; margin-top: 30px;">
-            <button class="btn-danger" style="width: auto; padding: 14px 30px;" onclick="logout()">Keluar Admin</button>
-        </div>
     </div>
 </div>
 
 <script type="module">
-    // Import SDK Firebase V9
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-    // MENGGUNAKAN FIREBASE CONFIG DARI RIKO
     const firebaseConfig = {
       apiKey: "AIzaSyBUplQfjuqQxpGkA9d2ULdpzcrSBG1YftI",
       authDomain: "absensi-live-app.firebaseapp.com",
@@ -362,40 +330,31 @@
       appId: "1:283171583300:web:7f2b5cd8c973a91bcc1311"
     };
 
-    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // STATE MANAGEMENT (Tersambung ke Firebase)
     let users = [{u:'admin', p:'admin', r:'admin'}];
     let data = [];
     let resetRequests = [];
     let filteredDataCache = []; 
     let timerInterval;
 
-    // Listener Real-time Firebase
     onValue(ref(db, 'users'), (snapshot) => { 
         if(snapshot.exists()) users = snapshot.val(); 
-        if(!document.getElementById('adminPage').classList.contains('hidden')) { renderDaftarUser(); renderAnalisaTarget(); updateFilterCheckboxes(); }
+        if(!document.getElementById('adminPage').classList.contains('hidden')) { renderDaftarUser(); renderAnalisaTarget(); updateFilterCheckboxes(); updateGrafikDropdown(); }
     });
     onValue(ref(db, 'absensi_data'), (snapshot) => { 
-        if(snapshot.exists()) data = snapshot.val(); 
-        if(!document.getElementById('adminPage').classList.contains('hidden')) { applyFilters(); renderAnalisaTarget(); }
-        if(!document.getElementById('hostPage').classList.contains('hidden')) { renderHistory(); }
+        if(snapshot.exists()) data = snapshot.val(); else data = [];
+        if(!document.getElementById('adminPage').classList.contains('hidden')) { applyFilters(); renderAnalisaTarget(); updateGrafik(); }
+        if(!document.getElementById('hostPage').classList.contains('hidden')) renderHistory();
     });
     onValue(ref(db, 'reset_requests'), (snapshot) => { 
         if(snapshot.exists()) resetRequests = snapshot.val(); else resetRequests = [];
         if(!document.getElementById('adminPage').classList.contains('hidden')) renderResetRequests();
     });
 
-    // Fungsi Sync ke Firebase
-    const sync = () => {
-        set(ref(db, 'users'), users);
-        set(ref(db, 'absensi_data'), data);
-        set(ref(db, 'reset_requests'), resetRequests);
-    };
+    const sync = () => { set(ref(db, 'users'), users); set(ref(db, 'absensi_data'), data); set(ref(db, 'reset_requests'), resetRequests); };
 
-    // --- UTILITIES ---
     function clearSemuaInput() { document.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]), select').forEach(el => el.value = ''); }
     function formatDurasi(totalDetik) {
         if (totalDetik < 60) return `${totalDetik} dtk`;
@@ -415,81 +374,84 @@
         return { start: start.getTime(), end: end.getTime() };
     }
 
-    // --- GLOBAL FUNCTIONS BINDING ---
-    window.toggleTheme = function(skipSave = false) {
+    window.toggleTheme = function() {
         document.body.classList.toggle('light-mode');
         const isLight = document.body.classList.contains('light-mode');
         document.getElementById('themeBtn').innerText = isLight ? '🌙' : '☀️';
-        if(!skipSave) localStorage.setItem('theme', isLight ? 'light' : 'dark');
+        localStorage.setItem('theme', isLight ? 'light' : 'dark');
+        if(window.myDailyChart) window.updateGrafik();
     }
-    if(localStorage.getItem('theme') === 'light') window.toggleTheme(true);
+    if(localStorage.getItem('theme') === 'light') { document.body.classList.add('light-mode'); document.getElementById('themeBtn').innerText = '🌙'; }
+
+    window.toggleSidebar = function() { document.getElementById('adminSidebar').classList.toggle('minimized'); }
 
     window.nav = function(id) {
-        clearSemuaInput();
-        document.querySelectorAll('.card').forEach(c => c.classList.add('hidden'));
+        document.querySelectorAll('.container > .card, #adminPage').forEach(c => c.classList.add('hidden'));
+        document.getElementById('mainContainer').classList.remove('hidden');
+        if(id === 'adminPage') document.getElementById('mainContainer').classList.add('hidden');
         const target = document.getElementById(id); target.classList.remove('hidden');
-        anime({ targets: target, opacity: [0, 1], translateY: [30, 0], duration: 800, easing: 'easeOutQuart' });
+        anime({ targets: target, opacity: [0, 1], translateY: [20, 0], duration: 500, easing: 'easeOutQuart' });
     }
 
-    window.toggleDropdown = function(id) {
-        document.querySelectorAll('.custom-options').forEach(el => { if(el.id !== id) el.classList.remove('open'); });
-        document.getElementById(id).classList.toggle('open');
-    }
-    document.addEventListener('click', e => { if (!e.target.closest('.custom-select-wrapper')) document.querySelectorAll('.custom-options').forEach(el => el.classList.remove('open')); });
-
-    window.updateHostText = function() {
-        const checked = document.querySelectorAll('.host-cb:checked');
-        document.getElementById('hostSelectedText').innerText = checked.length === 0 ? "Semua Host" : (checked.length === 1 ? checked[0].value : `${checked.length} Host`);
-    }
-    window.updatePlatText = function() {
-        const checked = document.querySelectorAll('.plat-cb:checked');
-        document.getElementById('platSelectedText').innerText = checked.length === 0 ? "Semua Platform" : (checked.length === 1 ? checked[0].value : `${checked.length} Plat`);
+    window.switchAdminTab = function(tabName) {
+        document.querySelectorAll('.sidebar-menu li').forEach(li => li.classList.remove('active'));
+        document.getElementById(`menu-${tabName}`).classList.add('active');
+        document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+        document.getElementById(`tab-${tabName}`).classList.add('active');
+        if(tabName === 'grafik') { updateGrafikDropdown(); window.updateGrafik(); }
     }
 
     window.register = function() {
         const u = document.getElementById('regUsername').value.trim(), p = document.getElementById('regPassword').value.trim();
-        if(!u || !p) return Swal.fire({ icon: 'warning', title: 'Oops...', text: 'Harap isi Nama dan Password!' });
-        if(users.find(x => x.u === u)) return Swal.fire({ icon: 'error', title: 'Gagal', text: 'Nama tersebut sudah terdaftar! Gunakan nama lain.' });
+        if(!u || !p) return Swal.fire({ icon: 'warning', text: 'Isi Nama dan Password!' });
+        if(users.find(x => x.u === u)) return Swal.fire({ icon: 'error', text: 'Nama sudah terdaftar!' });
         users.push({u, p, r:'host', targetMingguan: 0}); sync(); 
-        Swal.fire({ icon: 'success', title: 'Berhasil!', text: 'Pendaftaran sukses. Silakan login.', timer: 2000, showConfirmButton: false }).then(() => window.nav('loginPage'));
+        Swal.fire({ icon: 'success', title: 'Berhasil', timer: 1500, showConfirmButton: false }).then(() => window.nav('loginPage'));
     }
 
     window.login = function() {
         const u = document.getElementById('loginUsername').value.trim(), p = document.getElementById('loginPassword').value.trim();
         const user = users.find(x => x.u === u && x.p === p);
-        if(!user) return Swal.fire({ icon: 'error', title: 'Akses Ditolak', text: 'Nama atau password salah!' });
+        if(!user) return Swal.fire({ icon: 'error', text: 'Nama atau password salah!' });
         
         localStorage.setItem('activeUser', u);
         if(user.r === 'admin') { window.nav('adminPage'); initAdmin(); }
         else { 
             document.getElementById('hostNameDisplay').innerText = u; 
-            document.getElementById('hostTargetDisplay').innerText = (user.targetMingguan || 0) > 0 ? `${user.targetMingguan} Jam / Minggu` : "Belum diatur";
+            document.getElementById('hostTargetDisplay').innerText = (user.targetMingguan || 0) > 0 ? `${user.targetMingguan} Jam/Mgg` : "Belum diatur";
             window.nav('hostPage'); checkActiveSession(); renderHistory(); 
+            document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false);
+            document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform...";
         }
     }
-
     window.ajukanReset = function() {
         const u = document.getElementById('forgotUsername').value.trim();
-        if(!u) return Swal.fire({ icon: 'warning', title: 'Perhatian', text: 'Masukkan nama Anda!' }); 
-        if(!users.find(x => x.u === u)) return Swal.fire({ icon: 'error', title: 'Gagal', text: 'Nama tidak ditemukan di sistem!' });
+        if(!u) return; if(!users.find(x => x.u === u)) return Swal.fire({ icon: 'error', text: 'Nama tidak ditemukan!' });
         if(!resetRequests.includes(u)) { resetRequests.push(u); sync(); }
-        Swal.fire({ icon: 'success', title: 'Terkirim!', text: 'Permintaan reset dikirim ke Admin.', timer: 2000, showConfirmButton: false }).then(() => window.nav('loginPage'));
+        Swal.fire({ icon: 'success', title: 'Terkirim', timer: 1500, showConfirmButton: false }).then(() => window.nav('loginPage'));
     }
-
     window.logout = function() { localStorage.removeItem('activeUser'); clearInterval(timerInterval); window.nav('loginPage'); }
+
+    window.updateHostPlatText = function() {
+        const checked = document.querySelectorAll('.host-plat-cb:checked');
+        const textEl = document.getElementById('hostPlatSelectedText');
+        if(checked.length === 0) textEl.innerText = "Pilih Platform...";
+        else if(checked.length === 1) textEl.innerText = checked[0].value;
+        else textEl.innerText = Array.from(checked).map(cb => cb.value).join(', ');
+    }
 
     function checkActiveSession() {
         const user = localStorage.getItem('activeUser'), sess = JSON.parse(localStorage.getItem('sess_' + user));
         if(sess) { document.getElementById('startSection').classList.add('hidden'); document.getElementById('liveSection').classList.remove('hidden'); startTimer(sess.start); }
         else { document.getElementById('startSection').classList.remove('hidden'); document.getElementById('liveSection').classList.add('hidden'); }
     }
-
     window.mulai = function() {
-        const user = localStorage.getItem('activeUser'), plat = document.getElementById('platform').value;
-        if(!plat) return Swal.fire({ icon: 'warning', title: 'Perhatian', text: 'Pilih Platform Live terlebih dahulu!' });
+        const user = localStorage.getItem('activeUser');
+        const checked = Array.from(document.querySelectorAll('.host-plat-cb:checked')).map(cb => cb.value);
+        if(checked.length === 0) return Swal.fire({ icon: 'warning', text: 'Pilih minimal 1 Platform Live!' });
+        const plat = checked.join(', ');
         const start = Date.now(); localStorage.setItem('sess_'+user, JSON.stringify({start, plat})); checkActiveSession();
     }
-
     function startTimer(startTime) {
         clearInterval(timerInterval);
         timerInterval = setInterval(() => {
@@ -498,30 +460,32 @@
             document.getElementById('timerDisplay').innerText = `${h}:${m}:${s}`;
         }, 1000);
     }
-
     window.selesai = function() {
         const user = localStorage.getItem('activeUser'), sess = JSON.parse(localStorage.getItem('sess_'+user)), f = document.getElementById('screenshot').files[0];
-        if(!f) return Swal.fire({ icon: 'warning', title: 'Perhatian', text: 'Wajib mengunggah screenshot bukti!' });
+        if(!f) return Swal.fire({ icon: 'warning', text: 'Upload SS Bukti!' });
         const r = new FileReader();
         r.onload = e => {
             const end = Date.now(), detik = Math.floor((end - sess.start) / 1000);
             data.push({
-                id: Date.now(), host: user, plat: sess.plat, timestamp: sess.start,
-                tgl: new Date(sess.start).toLocaleDateString('id-ID'),
-                mulai: new Date(sess.start).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
-                akhir: new Date(end).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
+                id: Date.now() + Math.random(), host: user, plat: sess.plat, timestamp: sess.start,
+                tgl: new Date(sess.start).toLocaleDateString('en-CA'), 
+                mulai: new Date(sess.start).toLocaleTimeString('en-GB'), 
+                akhir: new Date(end).toLocaleTimeString('en-GB'),
                 detik: detik, img: e.target.result
             });
-            sync(); localStorage.removeItem('sess_'+user); clearInterval(timerInterval); clearSemuaInput(); 
-            Swal.fire({ icon: 'success', title: 'Kerja Bagus!', text: 'Sesi Live berhasil disimpan.' });
-            checkActiveSession(); renderHistory();
+            sync(); localStorage.removeItem('sess_'+user); clearInterval(timerInterval); 
+            document.getElementById('screenshot').value = '';
+            document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false);
+            document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform...";
+            Swal.fire({ icon: 'success', title: 'Disimpan!' }); checkActiveSession(); renderHistory();
         }; r.readAsDataURL(f);
     }
-
     function renderHistory() {
         const user = localStorage.getItem('activeUser'), body = document.getElementById('historyBody'); body.innerHTML = '';
-        const userData = data.filter(x => x.host === user).reverse();
-        userData.forEach(x => { body.innerHTML += `<tr><td style="font-weight:600;">${x.tgl}</td><td style="color:var(--text-dim); font-variant-numeric: tabular-nums;">${x.mulai} - ${x.akhir}</td><td><span class="badge">${x.plat}</span></td><td style="font-weight:700; color:var(--primary);">${formatDurasi(x.detik)}</td><td><img src="${x.img}" class="img-preview" onclick="window.open('${x.img}')"></td></tr>`; });
+        data.filter(x => x.host === user).reverse().forEach(x => { 
+            let platBadges = x.plat.split(', ').map(p => `<span class="badge" style="margin-right:3px;">${p}</span>`).join('');
+            body.innerHTML += `<tr><td style="font-weight:600;">${x.tgl}</td><td style="color:var(--text-dim); font-variant-numeric: tabular-nums;">${x.mulai} - ${x.akhir}</td><td>${platBadges}</td><td style="font-weight:700; color:var(--primary);">${formatDurasi(x.detik)}</td><td><img src="${x.img}" class="img-preview" onclick="window.open('${x.img}')"></td></tr>`; 
+        });
     }
 
     function initAdmin() { renderResetRequests(); renderDaftarUser(); renderAnalisaTarget(); updateFilterCheckboxes(); applyFilters(); }
@@ -529,24 +493,23 @@
     function renderResetRequests() {
         const sec = document.getElementById('adminResetSection'), body = document.getElementById('resetReqBody');
         if(resetRequests.length === 0) sec.classList.add('hidden');
-        else { sec.classList.remove('hidden'); body.innerHTML = ''; resetRequests.forEach(u => body.innerHTML += `<tr><td>${u}</td><td><button onclick="berikanPasswordBaru('${u}')" class="btn-primary" style="padding:8px 15px; width:auto;">Reset Sandi</button></td></tr>`); }
+        else { sec.classList.remove('hidden'); body.innerHTML = ''; resetRequests.forEach(u => body.innerHTML += `<tr><td>${u}</td><td><button onclick="berikanPasswordBaru('${u}')" class="btn-primary" style="padding:6px 12px; width:auto; font-size:0.8rem;">Reset Sandi</button></td></tr>`); }
     }
 
     function renderAnalisaTarget() {
         const body = document.getElementById('analisaTargetBody'); body.innerHTML = '';
         const hosts = users.filter(u => u.r === 'host');
-        if(hosts.length === 0) { body.innerHTML = '<tr><td colspan="7" style="text-align:center;">Belum ada Host.</td></tr>'; return; }
-        const weekRange = getWeekRange(), monthRange = getMonthRange();
+        if(hosts.length === 0) return body.innerHTML = '<tr><td colspan="7" style="text-align:center;">Belum ada Host.</td></tr>';
+        const wR = getWeekRange(), mR = getMonthRange();
         hosts.forEach(h => {
-            const hostData = data.filter(d => d.host === h.u);
-            const dM = hostData.filter(d => d.timestamp >= weekRange.start && d.timestamp <= weekRange.end).reduce((sum, curr) => sum + curr.detik, 0);
-            const dB = hostData.filter(d => d.timestamp >= monthRange.start && d.timestamp <= monthRange.end).reduce((sum, curr) => sum + curr.detik, 0);
-            const jM = (dM / 3600).toFixed(1), jB = (dB / 3600).toFixed(1);
-            const tM = h.targetMingguan || 0, tB = tM * 4;
-            let sM = `<span class="badge badge-info">Belum diset</span>`, sB = `<span class="badge badge-info">Belum diset</span>`;
+            const hD = data.filter(d => d.host === h.u);
+            const dM = hD.filter(d => d.timestamp >= wR.start && d.timestamp <= wR.end).reduce((sum, c) => sum + c.detik, 0);
+            const dB = hD.filter(d => d.timestamp >= mR.start && d.timestamp <= mR.end).reduce((sum, c) => sum + c.detik, 0);
+            const jM = (dM / 3600).toFixed(1), jB = (dB / 3600).toFixed(1), tM = h.targetMingguan || 0, tB = tM * 4;
+            let sM = `<span class="badge badge-info">-</span>`, sB = `<span class="badge badge-info">-</span>`;
             if(tM > 0) {
-                sM = parseFloat(jM) >= tM ? `<span class="badge badge-success">✅ Tercapai</span>` : `<span class="badge badge-danger">⚠️ ${tM - parseFloat(jM)} Jam lagi</span>`;
-                sB = parseFloat(jB) >= tB ? `<span class="badge badge-success">✅ Tercapai</span>` : `<span class="badge badge-danger">⚠️ ${tB - parseFloat(jB)} Jam lagi</span>`;
+                sM = parseFloat(jM) >= tM ? `<span class="badge badge-success">✅ Tercapai</span>` : `<span class="badge badge-danger">⚠️ ${tM - parseFloat(jM)} Jam</span>`;
+                sB = parseFloat(jB) >= tB ? `<span class="badge badge-success">✅ Tercapai</span>` : `<span class="badge badge-danger">⚠️ ${tB - parseFloat(jB)} Jam</span>`;
             }
             body.innerHTML += `<tr><td style="font-weight:700; color:var(--primary);">${h.u}</td><td style="font-weight:600;">${tM > 0 ? tM + ' Jam' : '-'}</td><td style="font-weight:700;">${jM} Jam</td><td style="text-align:center;">${sM}</td><td style="font-weight:600;">${tB > 0 ? tB + ' Jam' : '-'}</td><td style="font-weight:700;">${jB} Jam</td><td style="text-align:center;">${sB}</td></tr>`;
         });
@@ -556,79 +519,184 @@
         const b = document.getElementById('userListBody'); b.innerHTML = '';
         users.filter(u => u.r === 'host').forEach(h => {
             const tT = h.targetMingguan > 0 ? `<span class="badge badge-success">${h.targetMingguan} Jam / Mgg</span>` : `<span class="badge badge-danger">Belum diset</span>`;
-            b.innerHTML += `<tr><td style="font-weight:700;">${h.u}</td><td>${tT}</td><td><button onclick="setTargetJam('${h.u}')" class="btn-info" style="padding:8px 12px; width:auto; border-radius:8px;">🎯 Target</button> <button onclick="berikanPasswordBaru('${h.u}')" class="btn-warning" style="padding:8px 12px; width:auto; border-radius:8px;">Sandi</button> <button onclick="hapusUser('${h.u}')" class="btn-outline" style="padding:8px 12px; width:auto; color:var(--accent); border-radius:8px;">Hapus</button></td></tr>`;
+            b.innerHTML += `<tr><td style="font-weight:700;">${h.u}</td><td>${tT}</td><td><button onclick="setTargetJam('${h.u}')" class="btn-info" style="padding:6px 10px; width:auto; border-radius:6px; font-size:0.8rem; margin-right:5px;">🎯 Target</button><button onclick="berikanPasswordBaru('${h.u}')" class="btn-warning" style="padding:6px 10px; width:auto; border-radius:6px; font-size:0.8rem; margin-right:5px;">Sandi</button><button onclick="hapusUser('${h.u}')" class="btn-outline" style="padding:6px 10px; width:auto; color:var(--accent); border-radius:6px; font-size:0.8rem;">Hapus</button></td></tr>`;
         });
     }
 
     window.setTargetJam = function(u) {
         const curr = users.find(x => x.u === u).targetMingguan || '';
-        Swal.fire({ title: `Atur Target ${u}`, text: 'Masukkan target JAM per MINGGU (misal: 10)', input: 'number', inputValue: curr, showCancelButton: true, confirmButtonText: 'Simpan', cancelButtonText: 'Batal' }).then((res) => {
-            if (res.isConfirmed && res.value !== "") {
-                const targetNum = parseFloat(res.value);
-                if (!isNaN(targetNum)) {
-                    users.find(x => x.u === u).targetMingguan = targetNum; sync();
-                    Swal.fire('Tersimpan!', `Target diatur menjadi ${targetNum} Jam/Minggu.`, 'success');
-                } else Swal.fire('Error', 'Angka tidak valid.', 'error');
+        Swal.fire({ title: `Target ${u}`, text: 'Jam per Minggu:', input: 'number', inputValue: curr, showCancelButton: true }).then((res) => {
+            if (res.isConfirmed && res.value) { users.find(x => x.u === u).targetMingguan = parseFloat(res.value); sync(); Swal.fire('Tersimpan!', '', 'success'); }
+        });
+    }
+    window.berikanPasswordBaru = function(u) { Swal.fire({ title: `Sandi Baru ${u}`, input: 'text', showCancelButton: true }).then((res) => { if (res.isConfirmed && res.value) { users.find(x => x.u === u).p = res.value; resetRequests = resetRequests.filter(r => r !== u); sync(); Swal.fire('Berhasil!', '', 'success'); } }); }
+    window.hapusUser = function(u) { Swal.fire({ title: `Hapus Akun ${u}?`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33' }).then((res) => { if (res.isConfirmed) { users = users.filter(x => x.u !== u); resetRequests = resetRequests.filter(r => r !== u); sync(); Swal.fire('Terhapus!', '', 'success'); } }); }
+
+    // --- FITUR BARU: HAPUS RIWAYAT ABSENSI ---
+    window.hapusRiwayat = function(id) {
+        Swal.fire({
+            title: 'Hapus Data Riwayat?',
+            text: "Data ini akan dihapus permanen dari rekapan.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#e11d48',
+            cancelButtonColor: '#4a5568',
+            confirmButtonText: 'Ya, Hapus!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                data = data.filter(x => x.id !== id);
+                sync();
+                Swal.fire('Terhapus!', 'Data riwayat berhasil dihapus.', 'success');
             }
         });
     }
 
-    window.berikanPasswordBaru = function(u) { 
-        Swal.fire({ title: `Sandi Baru untuk ${u}`, input: 'text', inputPlaceholder: 'Ketik password baru...', showCancelButton: true, confirmButtonText: 'Ubah Sandi' }).then((res) => {
-            if (res.isConfirmed && res.value) {
-                users.find(x => x.u === u).p = res.value; resetRequests = resetRequests.filter(r => r !== u); sync();
-                Swal.fire('Berhasil!', `Sandi diperbarui.`, 'success');
-            }
-        });
+    window.downloadTemplateExcel = async function() {
+        const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('Data Upload');
+        ws.columns = [
+            { header: 'Username Host', key: 'host', width: 25 },
+            { header: 'Tanggal (YYYY-MM-DD)', key: 'tgl', width: 25 },
+            { header: 'Platform', key: 'plat', width: 20 },
+            { header: 'Jam Mulai (HH:mm:ss)', key: 'mulai', width: 25 },
+            { header: 'Jam Selesai (HH:mm:ss)', key: 'akhir', width: 25 }
+        ];
+        ws.getRow(1).font = {bold: true}; ws.getRow(1).fill = {type: 'pattern', pattern:'solid', fgColor:{argb:'FF3B82F6'}}; ws.getRow(1).font = {color: {argb: 'FFFFFFFF'}};
+        ws.addRow({host: 'Riko', tgl: '2026-04-01', plat: 'TikTok, Shopee', mulai: '10:00:00', akhir: '12:30:00'});
+        const buf = await wb.xlsx.writeBuffer(); saveAs(new Blob([buf]), `Template_Upload_Manual.xlsx`);
     }
 
-    window.hapusUser = function(u) { 
-        Swal.fire({ title: `Hapus Akun ${u}?`, text: "Host ini tidak akan bisa login lagi. Data riwayat live tetap aman.", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Ya, Hapus!' }).then((res) => {
-            if (res.isConfirmed) {
-                users = users.filter(x => x.u !== u); resetRequests = resetRequests.filter(r => r !== u); sync();
-                Swal.fire('Terhapus!', `Akun dihapus.`, 'success');
-            }
-        });
+    window.prosesUploadManual = function() {
+        const fileInput = document.getElementById('manualUploadFile');
+        if(fileInput.files.length === 0) return Swal.fire('Error', 'Pilih file Excel!', 'warning');
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const dataFile = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(dataFile, {type: 'array'});
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, {raw: false});
+            if(jsonData.length === 0) return Swal.fire('Error', 'Excel kosong.', 'error');
+
+            let berhasil = 0;
+            const dummyImg = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII="; 
+
+            jsonData.forEach(row => {
+                const host = row['Username Host'] || row['host'], tgl = row['Tanggal (YYYY-MM-DD)'] || row['tgl'], plat = row['Platform'] || row['plat'], mulai = row['Jam Mulai (HH:mm:ss)'] || row['mulai'], akhir = row['Jam Selesai (HH:mm:ss)'] || row['akhir'];
+                if(host && tgl && plat && mulai && akhir) {
+                    const startTs = new Date(`${tgl}T${mulai}`).getTime(), endTs = new Date(`${tgl}T${akhir}`).getTime();
+                    if(!isNaN(startTs) && !isNaN(endTs)) {
+                        const detik = Math.floor((endTs - startTs) / 1000);
+                        data.push({ id: Date.now() + Math.random(), host: host, plat: plat, timestamp: startTs, tgl: tgl, mulai: mulai, akhir: akhir, detik: detik, img: dummyImg });
+                        berhasil++;
+                    }
+                }
+            });
+
+            if(berhasil > 0) { sync(); fileInput.value = ''; Swal.fire('Sukses!', `${berhasil} baris ditambahkan.`, 'success'); } 
+            else { Swal.fire('Gagal', 'Tidak ada baris valid.', 'error'); }
+        };
+        reader.readAsArrayBuffer(fileInput.files[0]);
     }
 
-    function updateFilterCheckboxes() {
-        const c = document.getElementById('filterHostList'); c.innerHTML = '';
-        users.filter(u => u.r === 'host').forEach(h => c.innerHTML += `<label><input type="checkbox" class="host-cb" value="${h.u}" onchange="updateHostText()"> ${h.u}</label>`);
+    window.myDailyChart = null; window.myTargetChart = null;
+    
+    function updateGrafikDropdown() {
+        const sel = document.getElementById('grafikHostSelect'); sel.innerHTML = '';
+        const hosts = users.filter(u => u.r === 'host');
+        if(hosts.length === 0) { sel.innerHTML = '<option>Belum ada Host</option>'; return; }
+        hosts.forEach(h => sel.innerHTML += `<option value="${h.u}">${h.u}</option>`);
     }
 
-    window.resetFilter = function() { document.querySelectorAll('.custom-options input').forEach(cb => cb.checked = false); window.updateHostText(); window.updatePlatText(); document.getElementById('filterStartDate').value = ''; document.getElementById('filterEndDate').value = ''; window.applyFilters(); }
+    window.updateGrafik = function() {
+        const hostName = document.getElementById('grafikHostSelect').value;
+        if(!hostName || hostName === 'Belum ada Host') return;
+
+        const hostUser = users.find(u => u.u === hostName);
+        const targetMgg = hostUser ? (hostUser.targetMingguan || 0) : 0;
+        const targetBln = targetMgg * 4, targetHarian = targetMgg > 0 ? (targetMgg / 7).toFixed(1) : 0; 
+
+        const hostData = data.filter(d => d.host === hostName);
+        const mRange = getMonthRange();
+        const dataBulanIni = hostData.filter(d => d.timestamp >= mRange.start && d.timestamp <= mRange.end);
+        
+        const dailyMap = {};
+        dataBulanIni.forEach(d => { if(!dailyMap[d.tgl]) dailyMap[d.tgl] = 0; dailyMap[d.tgl] += d.detik; });
+
+        const labelsDaily = Object.keys(dailyMap).sort();
+        const valuesDaily = labelsDaily.map(tgl => (dailyMap[tgl] / 3600).toFixed(1));
+        const targetDailyLine = labelsDaily.map(() => targetHarian);
+
+        const wRange = getWeekRange();
+        const detikMggIni = hostData.filter(d => d.timestamp >= wRange.start && d.timestamp <= wRange.end).reduce((sum, c) => sum + c.detik, 0);
+        const detikBlnIni = dataBulanIni.reduce((sum, c) => sum + c.detik, 0);
+        const jamMgg = (detikMggIni / 3600).toFixed(1), jamBln = (detikBlnIni / 3600).toFixed(1);
+
+        const isLight = document.body.classList.contains('light-mode');
+        const textColor = isLight ? '#4a5568' : '#94a3b8';
+
+        Chart.defaults.color = textColor;
+        Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
+
+        const cleanOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { usePointStyle: true, padding: 15 } }, tooltip: { backgroundColor: isLight ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.9)', titleColor: isLight ? '#fff' : '#000', bodyColor: isLight ? '#fff' : '#000', padding: 10, cornerRadius: 8, displayColors: false } }, scales: { x: { display: false }, y: { display: false } } };
+
+        if(window.myDailyChart) window.myDailyChart.destroy();
+        const ctxDaily = document.getElementById('dailyLineChart').getContext('2d');
+        let gradient = ctxDaily.createLinearGradient(0, 0, 0, 300); gradient.addColorStop(0, 'rgba(90, 103, 216, 0.5)'); gradient.addColorStop(1, 'rgba(90, 103, 216, 0.0)');
+        window.myDailyChart = new Chart(ctxDaily, { type: 'line', data: { labels: labelsDaily.length > 0 ? labelsDaily : ['-'], datasets: [ { label: 'Pencapaian (Jam)', data: valuesDaily.length > 0 ? valuesDaily : [0], borderColor: '#5a67d8', backgroundColor: gradient, fill: true, tension: 0.4, borderWidth: 3, pointBackgroundColor: '#5a67d8', pointRadius: 4 }, { label: 'Target Harian', data: targetDailyLine, borderColor: '#f59e0b', borderDash: [6, 6], fill: false, pointRadius: 0, borderWidth: 2 } ] }, options: cleanOptions });
+
+        if(window.myTargetChart) window.myTargetChart.destroy();
+        const ctxTarget = document.getElementById('targetBarChart').getContext('2d');
+        window.myTargetChart = new Chart(ctxTarget, { type: 'bar', data: { labels: ['Minggu Ini', 'Bulan Ini'], datasets: [ { label: 'Tercapai (Jam)', data: [jamMgg, jamBln], backgroundColor: '#10b981', borderRadius: 8, barPercentage: 0.5 }, { label: 'Target', data: [targetMgg, targetBln], backgroundColor: 'rgba(244, 63, 94, 0.4)', borderRadius: 8, barPercentage: 0.5 } ] }, options: cleanOptions });
+    }
+
+    window.toggleDropdown = function(id) { document.querySelectorAll('.custom-options').forEach(el => { if(el.id !== id) el.classList.remove('open'); }); document.getElementById(id).classList.toggle('open'); }
+    document.addEventListener('click', e => { if (!e.target.closest('.custom-select-wrapper')) document.querySelectorAll('.custom-options').forEach(el => el.classList.remove('open')); });
+    window.updateHostText = function() { const checked = document.querySelectorAll('.host-cb:checked'); document.getElementById('hostSelectedText').innerText = checked.length === 0 ? "Semua Host" : (checked.length === 1 ? checked[0].value : `${checked.length} Host`); }
+    window.updatePlatText = function() { const checked = document.querySelectorAll('.plat-cb:checked'); document.getElementById('platSelectedText').innerText = checked.length === 0 ? "Semua Platform" : (checked.length === 1 ? checked[0].value : `${checked.length} Plat`); }
+    function updateFilterCheckboxes() { const c = document.getElementById('filterHostList'); c.innerHTML = ''; users.filter(u => u.r === 'host').forEach(h => c.innerHTML += `<label><input type="checkbox" class="host-cb" value="${h.u}" onchange="updateHostText()"> ${h.u}</label>`); }
+    
+    window.resetFilter = function() { document.querySelectorAll('.custom-options input[type="checkbox"]').forEach(cb => cb.checked = false); window.updateHostText(); window.updatePlatText(); document.getElementById('filterStartDate').value = ''; document.getElementById('filterEndDate').value = ''; window.applyFilters(); }
 
     window.applyFilters = function() {
         const hCbs = Array.from(document.querySelectorAll('.host-cb:checked')).map(cb => cb.value), pCbs = Array.from(document.querySelectorAll('.plat-cb:checked')).map(cb => cb.value);
         const sD = document.getElementById('filterStartDate').value, eD = document.getElementById('filterEndDate').value;
         filteredDataCache = data.filter(i => {
-            const mH = hCbs.length === 0 || hCbs.includes(i.host), mP = pCbs.length === 0 || pCbs.includes(i.plat);
-            let mD = true;
-            if(sD && i.timestamp < new Date(sD).setHours(0,0,0,0)) mD = false;
-            if(eD && i.timestamp > new Date(eD).setHours(23,59,59,999)) mD = false;
+            const mH = hCbs.length === 0 || hCbs.includes(i.host), mP = pCbs.length === 0 || pCbs.some(p => i.plat.includes(p));
+            let mD = true; if(sD && i.timestamp < new Date(sD).setHours(0,0,0,0)) mD = false; if(eD && i.timestamp > new Date(eD).setHours(23,59,59,999)) mD = false;
             return mH && mP && mD;
         });
         const b = document.getElementById('adminAbsensiBody'); b.innerHTML = '';
-        if(filteredDataCache.length === 0) { b.innerHTML = `<tr><td colspan="7" style="text-align:center;">Data tidak ditemukan.</td></tr>`; return; }
-        filteredDataCache.slice().reverse().forEach(x => b.innerHTML += `<tr><td style="font-weight:700;">${x.host}</td><td>${x.tgl}</td><td>${x.plat}</td><td style="font-variant-numeric: tabular-nums;">${x.mulai}</td><td style="font-variant-numeric: tabular-nums;">${x.akhir}</td><td>${formatDurasi(x.detik)}</td><td><img src="${x.img}" class="img-preview" onclick="window.open('${x.img}')"></td></tr>`);
+        if(filteredDataCache.length === 0) { b.innerHTML = `<tr><td colspan="8" style="text-align:center;">Data tidak ditemukan.</td></tr>`; return; }
+        
+        filteredDataCache.slice().reverse().forEach(x => {
+            let platBadges = x.plat.split(', ').map(p => `<span class="badge" style="margin-right:3px;">${p}</span>`).join('');
+            // TOMBOL HAPUS DITAMBAHKAN DI SINI
+            b.innerHTML += `<tr>
+                <td style="font-weight:700;">${x.host}</td><td>${x.tgl}</td><td>${platBadges}</td>
+                <td style="font-variant-numeric: tabular-nums;">${x.mulai}</td><td style="font-variant-numeric: tabular-nums;">${x.akhir}</td>
+                <td>${formatDurasi(x.detik)}</td><td><img src="${x.img}" class="img-preview" onclick="window.open('${x.img}')"></td>
+                <td><button onclick="hapusRiwayat(${x.id})" class="btn-outline" style="color:var(--accent); border-color:var(--accent); padding: 5px 10px; font-size: 0.75rem; width: auto;">Hapus</button></td>
+            </tr>`;
+        });
     }
 
     window.exportExcelFull = async function() {
-        if(filteredDataCache.length === 0) return Swal.fire({ icon: 'info', title: 'Kosong', text: 'Tidak ada data didownload.' });
+        if(filteredDataCache.length === 0) return Swal.fire('Kosong', 'Tidak ada data didownload.', 'info');
         const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('Rekap Detail');
-        ws.columns = [{header:'Host',key:'host',width:22},{header:'Tanggal',key:'tgl',width:15},{header:'Platform',key:'plat',width:18},{header:'Jam Mulai',key:'mulai',width:18},{header:'Jam Selesai',key:'akhir',width:18},{header:'Durasi',key:'durasi',width:20},{header:'Bukti',key:'bukti',width:18}];
-        const headerRow = ws.getRow(1); headerRow.font = {bold:true,color:{argb:'FFFFFFFF'}}; headerRow.fill = {type:'pattern',pattern:'solid',fgColor:{argb:'FF6366F1'}}; headerRow.alignment = {vertical:'middle',horizontal:'center'};
-        filteredDataCache.slice().reverse().forEach((x, index) => {
-            const rIdx = index + 2; ws.addRow({host:x.host,tgl:x.tgl,plat:x.plat,mulai:x.mulai,akhir:x.akhir,durasi:formatDurasi(x.detik)}); ws.getRow(rIdx).height = 65; ws.getRow(rIdx).alignment = {vertical:'middle',horizontal:'left'};
-            if(x.img) { try { const imgId = wb.addImage({base64:x.img.split(',')[1],extension:'png'}); ws.addImage(imgId, {tl:{col:6,row:rIdx-1},ext:{width:75,height:75}}); } catch(e){} }
+        ws.columns = [{header:'Host',key:'host',width:20},{header:'Tanggal',key:'tgl',width:15},{header:'Platform',key:'plat',width:25},{header:'Jam Mulai',key:'mulai',width:15},{header:'Jam Selesai',key:'akhir',width:15},{header:'Durasi',key:'durasi',width:18},{header:'Bukti',key:'bukti',width:15}];
+        const hR = ws.getRow(1); hR.font = {bold:true,color:{argb:'FFFFFFFF'}}; hR.fill = {type:'pattern',pattern:'solid',fgColor:{argb:'FF5A67D8'}}; hR.alignment = {vertical:'middle',horizontal:'center'};
+        filteredDataCache.slice().reverse().forEach((x, i) => {
+            const rIdx = i + 2; ws.addRow({host:x.host,tgl:x.tgl,plat:x.plat,mulai:x.mulai,akhir:x.akhir,durasi:formatDurasi(x.detik)}); ws.getRow(rIdx).height = 55; ws.getRow(rIdx).alignment = {vertical:'middle',horizontal:'left'};
+            if(x.img && x.img.length > 100) { try { const imgId = wb.addImage({base64:x.img.split(',')[1],extension:'png'}); ws.addImage(imgId, {tl:{col:6,row:rIdx-1},ext:{width:60,height:60}}); } catch(e){} }
+            else { ws.getCell(`G${rIdx}`).value = "Upload Manual"; }
         });
-        ws.eachRow((row) => { row.eachCell((cell) => { cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} }; }); });
-        const wsT = wb.addWorksheet('Total Waktu');
-        wsT.columns = [{header:'Nama Host',key:'host',width:25},{header:'Sesi',key:'sesi',width:15},{header:'Total Waktu',key:'waktu',width:25}];
+        ws.eachRow(row => row.eachCell(cell => cell.border = { top:{style:'thin'}, left:{style:'thin'}, bottom:{style:'thin'}, right:{style:'thin'} }));
+        
+        const wsT = wb.addWorksheet('Total Waktu'); wsT.columns = [{header:'Nama Host',key:'host',width:20},{header:'Sesi',key:'sesi',width:15},{header:'Total Waktu',key:'waktu',width:20}];
         wsT.getRow(1).font = {bold:true,color:{argb:'FFFFFFFF'}}; wsT.getRow(1).fill = {type:'pattern',pattern:'solid',fgColor:{argb:'FF10B981'}};
         const total = {}; filteredDataCache.forEach(x => { total[x.host] = (total[x.host] || 0) + x.detik; });
-        Object.keys(total).forEach(h => { wsT.addRow({host:h,sesi:filteredDataCache.filter(x => x.host === h).length + ' Sesi',waktu:formatDurasi(total[h])}); });
+        Object.keys(total).forEach(h => wsT.addRow({host:h,sesi:filteredDataCache.filter(x => x.host === h).length + ' Sesi',waktu:formatDurasi(total[h])}));
         wsT.eachRow(row => row.eachCell(cell => cell.border = {top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}}));
+        
         const buf = await wb.xlsx.writeBuffer(); saveAs(new Blob([buf]), `Rekap_Live_Host_${new Date().toLocaleDateString('id-ID')}.xlsx`);
     }
 
