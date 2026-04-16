@@ -18,6 +18,7 @@
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     
     <style>
+        /* === TEMA GLOBAL === */
         :root {
             --font-main: 'Plus Jakarta Sans', sans-serif;
             --primary: #5a67d8; --primary-hover: #4c51bf; --accent: #f43f5e;
@@ -44,7 +45,6 @@
         .theme-toggle:hover { transform: scale(1.1) rotate(15deg); }
 
         .container { width: 100%; max-width: 1000px; margin-top: 10px; perspective: 1000px; }
-        
         .admin-layout { display: flex; gap: 20px; width: 100%; max-width: 1350px; margin: 0 auto; align-items: flex-start; }
         
         .sidebar { width: 240px; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 20px; padding: 25px 15px; backdrop-filter: blur(16px); position: sticky; top: 20px; transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), padding 0.4s; overflow: hidden; z-index:50;}
@@ -128,6 +128,9 @@
         .scan-status { font-size: 0.75rem; font-weight: 600; text-align: center; margin-top: 8px; min-height: 15px;}
         .gmv-input { margin-top: 10px; }
 
+        /* Sync Status Indicator */
+        #syncStatus { position: fixed; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 30px; font-size: 0.8rem; font-weight: 600; z-index: 9999; display: none; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+
         @media (max-width: 900px) {
             .admin-layout { flex-direction: column; gap: 15px;}
             .sidebar { width: 100% !important; position: relative; top: 0; margin-bottom: 10px; display: flex; flex-direction: row; overflow-x: auto; padding: 10px;}
@@ -139,6 +142,7 @@
 </head>
 <body>
 
+<div id="syncStatus">⏳ Menyinkronkan Server...</div>
 <div class="theme-toggle" id="themeBtn" onclick="toggleTheme()" title="Ganti Tema">☀️</div>
 
 <div class="container" id="mainContainer">
@@ -329,12 +333,49 @@
     let users = [{u:'admin', p:'admin', r:'admin'}];
     let data = []; let resetRequests = []; let filteredDataCache = []; let timerInterval;
     window.sessionImages = {};
+    
+    // --- SAFETY LOCK (V24 FIX RACE CONDITION) ---
+    let isDataLoaded = false;
+    let isUsersLoaded = false;
 
-    onValue(ref(db, 'users'), (s) => { if(s.exists()) users = s.val(); if(!document.getElementById('adminPage').classList.contains('hidden')) { renderDaftarUser(); renderAnalisaTarget(); updateFilterCheckboxes(); updateGrafikDropdown(); } if(!document.getElementById('hostPage').classList.contains('hidden')) { window.updateHostProgress(); }});
-    onValue(ref(db, 'absensi_data'), (s) => { if(s.exists()) data = s.val(); else data = []; if(!document.getElementById('adminPage').classList.contains('hidden')) { window.applyFilters(); renderAnalisaTarget(); window.updateGrafik(); } if(!document.getElementById('hostPage').classList.contains('hidden')) { renderHistory(); window.updateHostProgress(); }});
-    onValue(ref(db, 'reset_requests'), (s) => { if(s.exists()) resetRequests = s.val(); else resetRequests = []; if(!document.getElementById('adminPage').classList.contains('hidden')) renderResetRequests();});
+    function showSyncStatus(show) {
+        const s = document.getElementById('syncStatus');
+        if(show) { s.style.display = 'block'; } else { setTimeout(()=> s.style.display = 'none', 500); }
+    }
 
-    const sync = () => { set(ref(db, 'users'), users); set(ref(db, 'absensi_data'), data); set(ref(db, 'reset_requests'), resetRequests); };
+    showSyncStatus(true);
+
+    onValue(ref(db, 'users'), (s) => { 
+        isUsersLoaded = true;
+        if(s.exists()) users = s.val(); 
+        if(!document.getElementById('adminPage').classList.contains('hidden')) { renderDaftarUser(); renderAnalisaTarget(); updateFilterCheckboxes(); updateGrafikDropdown(); } 
+        if(!document.getElementById('hostPage').classList.contains('hidden')) { window.updateHostProgress(); }
+        if(isDataLoaded && isUsersLoaded) showSyncStatus(false);
+    });
+
+    onValue(ref(db, 'absensi_data'), (s) => { 
+        isDataLoaded = true;
+        if(s.exists()) data = s.val(); else data = []; 
+        if(!document.getElementById('adminPage').classList.contains('hidden')) { window.applyFilters(); renderAnalisaTarget(); window.updateGrafik(); } 
+        if(!document.getElementById('hostPage').classList.contains('hidden')) { renderHistory(); window.updateHostProgress(); }
+        if(isDataLoaded && isUsersLoaded) showSyncStatus(false);
+    });
+
+    onValue(ref(db, 'reset_requests'), (s) => { 
+        if(s.exists()) resetRequests = s.val(); else resetRequests = []; 
+        if(!document.getElementById('adminPage').classList.contains('hidden')) renderResetRequests();
+    });
+
+    const sync = () => { 
+        if(!isDataLoaded || !isUsersLoaded) {
+            Swal.fire('⏳ Tunggu Sebentar', 'Sistem sedang menyinkronkan data dari server. Tolong tunggu beberapa detik.', 'warning');
+            return false;
+        }
+        set(ref(db, 'users'), users); 
+        set(ref(db, 'absensi_data'), data); 
+        set(ref(db, 'reset_requests'), resetRequests); 
+        return true;
+    };
 
     function clearSemuaInput() { document.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]), select').forEach(el => el.value = ''); window.sessionImages = {}; }
     function formatDurasi(d) { if (d < 60) return `${d} dtk`; const j = Math.floor(d/3600), m = Math.floor((d%3600)/60), s = d%60; let r = []; if(j>0) r.push(`${j} j`); if(m>0) r.push(`${m} m`); if(s>0) r.push(`${s} dtk`); return r.join(' '); }
@@ -348,7 +389,7 @@
     window.nav = function(id) { clearSemuaInput(); document.querySelectorAll('.container > .card, #adminPage').forEach(c => c.classList.add('hidden')); document.getElementById('mainContainer').classList.remove('hidden'); if(id === 'adminPage') document.getElementById('mainContainer').classList.add('hidden'); const target = document.getElementById(id); target.classList.remove('hidden'); anime({ targets: target, opacity: [0, 1], translateY: [20, 0], duration: 500, easing: 'easeOutQuart' }); }
     window.switchAdminTab = function(tN) { document.querySelectorAll('.sidebar-menu li').forEach(li => li.classList.remove('active')); document.getElementById(`menu-${tN}`).classList.add('active'); document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active')); document.getElementById(`tab-${tN}`).classList.add('active'); if(tN === 'grafik') { updateGrafikDropdown(); window.updateGrafik(); } }
 
-    window.register = function() { const u = document.getElementById('regUsername').value.trim(), p = document.getElementById('regPassword').value.trim(); if(!u || !p) return Swal.fire({icon:'warning',text:'Isi Nama dan Password!'}); if(users.find(x => x.u === u)) return Swal.fire({icon:'error',text:'Nama sudah terdaftar!'}); users.push({u, p, r:'host', targetMingguan: 0}); sync(); Swal.fire({icon:'success',title:'Berhasil',timer:1500,showConfirmButton:false}).then(()=>window.nav('loginPage')); }
+    window.register = function() { const u = document.getElementById('regUsername').value.trim(), p = document.getElementById('regPassword').value.trim(); if(!u || !p) return Swal.fire({icon:'warning',text:'Isi Nama dan Password!'}); if(users.find(x => x.u === u)) return Swal.fire({icon:'error',text:'Nama sudah terdaftar!'}); users.push({u, p, r:'host', targetMingguan: 0}); if(sync()) Swal.fire({icon:'success',title:'Berhasil',timer:1500,showConfirmButton:false}).then(()=>window.nav('loginPage')); }
     window.login = function() {
         const u = document.getElementById('loginUsername').value.trim(), p = document.getElementById('loginPassword').value.trim(); const user = users.find(x => x.u === u && x.p === p);
         if(!user) return Swal.fire({icon:'error',text:'Nama atau password salah!'});
@@ -360,7 +401,7 @@
             window.nav('hostPage'); checkActiveSession(); renderHistory(); document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; 
         }
     }
-    window.ajukanReset = function() { const u = document.getElementById('forgotUsername').value.trim(); if(!u) return; if(!users.find(x => x.u === u)) return Swal.fire({icon:'error',text:'Nama tidak ditemukan!'}); if(!resetRequests.includes(u)) { resetRequests.push(u); sync(); } Swal.fire({icon:'success',title:'Terkirim',timer:1500,showConfirmButton:false}).then(()=>window.nav('loginPage')); }
+    window.ajukanReset = function() { const u = document.getElementById('forgotUsername').value.trim(); if(!u) return; if(!users.find(x => x.u === u)) return Swal.fire({icon:'error',text:'Nama tidak ditemukan!'}); if(!resetRequests.includes(u)) { resetRequests.push(u); if(sync()) Swal.fire({icon:'success',title:'Terkirim',timer:1500,showConfirmButton:false}).then(()=>window.nav('loginPage')); } }
     window.logout = function() { localStorage.removeItem('activeUser'); clearInterval(timerInterval); window.nav('loginPage'); }
 
     window.updateHostProgress = function() {
@@ -416,6 +457,12 @@
 
     window.prosesOCR = function(input, plat) {
         const file = input.files[0]; if(!file) return;
+        
+        // Batasi ukuran file (misal > 3MB kompres, tapi untuk HTML murni agak sulit, kita batasi saja agar tidak raksasa)
+        if(file.size > 2 * 1024 * 1024) { // 2MB Warning
+            console.warn("Gambar terlalu besar, akan memakan memori DB");
+        }
+
         const reader = new FileReader(); reader.onload = function(e) { window.sessionImages[plat] = e.target.result; document.getElementById(`preview_${plat}`).src = e.target.result; document.getElementById(`preview_${plat}`).style.display = 'block'; document.getElementById(`pzt_${plat}`).style.display = 'none'; document.getElementById(`pz_${plat}`).style.borderStyle = 'solid'; document.getElementById(`pz_${plat}`).style.borderColor = 'var(--success)'; }
         reader.readAsDataURL(file);
         const statusEl = document.getElementById(`status_${plat}`), inputGmv = document.getElementById(`gmv_${plat}`);
@@ -428,6 +475,8 @@
     }
 
     window.selesai = function() {
+        if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem masih memuat data server, pastikan koneksi stabil.', 'warning');
+        
         const u = localStorage.getItem('activeUser'), sess = JSON.parse(localStorage.getItem('sess_'+u));
         const missing = sess.plats.filter(p => !window.sessionImages[p]);
         if(missing.length > 0) return Swal.fire({icon:'warning', title: 'Belum Lengkap!', text: `Harap upload SS untuk: ${missing.join(', ')}`});
@@ -437,13 +486,17 @@
         const end = Date.now(), detik = Math.floor((end - sess.start) / 1000);
         
         data.push({ id: Date.now() + Math.random(), host: u, plat: sess.plats.join(', '), timestamp: sess.start, tgl: new Date(sess.start).toLocaleDateString('en-CA'), mulai: new Date(sess.start).toLocaleTimeString('en-GB'), akhir: new Date(end).toLocaleTimeString('en-GB'), detik: detik, totalGmv: totalGmvAccumulated, platformsData: platformsData });
-        sync(); localStorage.removeItem('sess_'+u); clearInterval(timerInterval); window.sessionImages = {}; document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; 
-        Swal.fire({icon:'success',title:'Disimpan!'}); checkActiveSession(); renderHistory(); window.updateHostProgress();
+        
+        if(sync()) {
+            localStorage.removeItem('sess_'+u); clearInterval(timerInterval); window.sessionImages = {}; document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; 
+            Swal.fire({icon:'success',title:'Disimpan!'}); checkActiveSession(); renderHistory(); window.updateHostProgress();
+        }
     }
 
     window.lihatFoto = function(imgSrc) { Swal.fire({ imageUrl: imgSrc, imageAlt: 'Bukti SS', showConfirmButton: false, width: 'auto', padding: '1em', background: 'transparent', backdrop: 'rgba(0,0,0,0.85)' }); }
 
     window.editFoto = function(idStr, platName) {
+        if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
         const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*';
         input.onchange = e => {
             const file = e.target.files[0]; if(!file) return;
@@ -457,14 +510,17 @@
                     
                     Swal.fire({ title: 'Konfirmasi GMV Baru', text: `Platform: ${platName}. Edit jika AI salah.`, input: 'number', inputValue: highest > 100 ? highest : '', imageUrl: base64Img, imageHeight: 200, showCancelButton: true, confirmButtonText: 'Simpan Perubahan' }).then(res => {
                         if(res.isConfirmed) {
-                            const newGmv = parseInt(res.value || 0); const session = data.find(d => d.id == idStr);
+                            const newGmv = parseInt(res.value || 0); const session = data.find(d => String(d.id) === String(idStr));
                             if(session) {
                                 if(session.platformsData && session.platformsData.length > 0) {
                                     const pData = session.platformsData.find(p => p.plat === platName);
                                     if(pData) { pData.img = base64Img; pData.gmv = newGmv; }
                                     session.totalGmv = session.platformsData.reduce((s, p) => s + p.gmv, 0);
                                 } else { session.img = base64Img; session.gmv = newGmv; session.totalGmv = newGmv; }
-                                sync(); Swal.fire('Tersimpan', 'Foto dan GMV berhasil diupdate.', 'success');
+                                
+                                if(sync()) {
+                                    Swal.fire('Tersimpan', 'Foto dan GMV berhasil diupdate.', 'success');
+                                }
                             }
                         }
                     });
@@ -473,13 +529,14 @@
         }; input.click();
     }
 
-    // --- FIX HAPUS RIWAYAT (String Comparison) ---
     window.hapusRiwayat = function(id) { 
+        if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
         Swal.fire({title:'Hapus Data Riwayat?', text: "Sesi ini akan dihapus permanen.", icon:'warning',showCancelButton:true,confirmButtonColor:'#e11d48'}).then((r)=>{ 
             if(r.isConfirmed){ 
                 data = data.filter(x => String(x.id) !== String(id)); 
-                sync(); 
-                Swal.fire('Terhapus!','Data berhasil dihapus.','success'); 
+                if(sync()) {
+                    Swal.fire('Terhapus!','Data berhasil dihapus.','success'); 
+                }
             } 
         }); 
     }
@@ -521,9 +578,9 @@
             b.innerHTML += `<tr><td style="font-weight:700;">${h.u}</td><td>${tT}</td><td><button onclick="setTargetJam('${h.u}')" class="btn-info" style="padding:6px 10px; width:auto; border-radius:6px; font-size:0.8rem; margin-right:5px;">🎯 Target</button><button onclick="berikanPasswordBaru('${h.u}')" class="btn-warning" style="padding:6px 10px; width:auto; border-radius:6px; font-size:0.8rem; margin-right:5px;">Sandi</button><button onclick="hapusUser('${h.u}')" class="btn-outline" style="padding:6px 10px; width:auto; color:var(--accent); border-radius:6px; font-size:0.8rem;">Hapus</button></td></tr>`;
         });
     }
-    window.setTargetJam = function(u) { const c = users.find(x=>x.u===u).targetMingguan||''; Swal.fire({title:`Target ${u}`,text:'Jam per Minggu:',input:'number',inputValue:c,showCancelButton:true}).then((r)=>{ if(r.isConfirmed&&r.value){ users.find(x=>x.u===u).targetMingguan=parseFloat(r.value); sync(); Swal.fire('Tersimpan!','','success'); } }); }
-    window.berikanPasswordBaru = function(u) { Swal.fire({title:`Sandi Baru ${u}`,input:'text',showCancelButton:true}).then((r)=>{ if(r.isConfirmed&&r.value){ users.find(x=>x.u===u).p=r.value; resetRequests=resetRequests.filter(req=>req!==u); sync(); Swal.fire('Berhasil!','','success'); } }); }
-    window.hapusUser = function(u) { Swal.fire({title:`Hapus Akun ${u}?`,icon:'warning',showCancelButton:true,confirmButtonColor:'#e11d48'}).then((r)=>{ if(r.isConfirmed){ users=users.filter(x=>x.u!==u); resetRequests=resetRequests.filter(r=>r!==u); sync(); Swal.fire('Terhapus!','','success'); } }); }
+    window.setTargetJam = function(u) { const c = users.find(x=>x.u===u).targetMingguan||''; Swal.fire({title:`Target ${u}`,text:'Jam per Minggu:',input:'number',inputValue:c,showCancelButton:true}).then((r)=>{ if(r.isConfirmed&&r.value){ users.find(x=>x.u===u).targetMingguan=parseFloat(r.value); if(sync()) Swal.fire('Tersimpan!','','success'); } }); }
+    window.berikanPasswordBaru = function(u) { Swal.fire({title:`Sandi Baru ${u}`,input:'text',showCancelButton:true}).then((r)=>{ if(r.isConfirmed&&r.value){ users.find(x=>x.u===u).p=r.value; resetRequests=resetRequests.filter(req=>req!==u); if(sync()) Swal.fire('Berhasil!','','success'); } }); }
+    window.hapusUser = function(u) { Swal.fire({title:`Hapus Akun ${u}?`,icon:'warning',showCancelButton:true,confirmButtonColor:'#e11d48'}).then((r)=>{ if(r.isConfirmed){ users=users.filter(x=>x.u!==u); resetRequests=resetRequests.filter(r=>r!==u); if(sync()) Swal.fire('Terhapus!','','success'); } }); }
 
     window.downloadTemplateExcel = async function() {
         const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('Data Upload');
@@ -546,7 +603,7 @@
                     if(!isNaN(sT)&&!isNaN(eT)) { data.push({ id:Date.now()+Math.random(), host:h, plat:p, timestamp:sT, tgl:t, mulai:m, akhir:a, detik:Math.floor((eT-sT)/1000), img:dI, totalGmv:g }); b++; }
                 }
             });
-            if(b>0){ sync(); fI.value=''; Swal.fire('Sukses!',`${b} baris ditambahkan.`,'success'); } else Swal.fire('Gagal','Tidak ada baris valid.','error');
+            if(b>0){ if(sync()) { fI.value=''; Swal.fire('Sukses!',`${b} baris ditambahkan.`,'success'); } } else Swal.fire('Gagal','Tidak ada baris valid.','error');
         }; r.readAsArrayBuffer(fI.files[0]);
     }
 
@@ -671,7 +728,7 @@
             ws.getRow(rIdx).height=55; ws.getRow(rIdx).alignment={vertical:'middle',horizontal:'left'}; ws.getCell(`F${rIdx}`).numFmt = '"Rp "* #,##0'; 
             
             if(x.imgDisplay && x.imgDisplay.length>100) { 
-                try { const imgId = wb.addImage({base64:x.imgDisplay.split(',')[1],extension:'png'}); ws.addImage(imgId, {tl:{col:8,row:rIdx-1},ext:{width:50,height:50}}); }catch(e){} 
+                try { const imgId = wb.addImage({base64:x.imgDisplay.split(',')[1],extension:'png'}); ws.addImage(imgId, {tl:{col:7,row:rIdx-1},ext:{width:50,height:50}}); }catch(e){} 
             } else ws.getCell(`H${rIdx}`).value = "Manual";
         });
         ws.eachRow(row=>row.eachCell(cell=>cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}}));
