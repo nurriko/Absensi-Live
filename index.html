@@ -18,6 +18,7 @@
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     
     <style>
+        /* === TEMA GLOBAL === */
         :root {
             --font-main: 'Plus Jakarta Sans', sans-serif;
             --primary: #5a67d8; --primary-hover: #4c51bf; --accent: #f43f5e;
@@ -81,6 +82,12 @@
 
         .link-text { color: var(--primary); text-decoration: none; cursor: pointer; font-size: 0.85rem; text-align: center; display: block; margin-top: 15px; font-weight: 600;}
         
+        /* === FITUR BARU: MATA PASSWORD === */
+        .password-container { position: relative; display: block; }
+        .password-container input { padding-right: 40px; }
+        .password-toggle { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: auto; background: transparent; border: none; padding: 0; color: var(--text-dim); font-size: 1.2rem; cursor: pointer; box-shadow: none !important; margin: 0;}
+        .password-toggle:hover { background: transparent; transform: translateY(-50%) scale(1.1); box-shadow: none !important;}
+
         .custom-select-wrapper { position: relative; user-select: none; }
         .custom-select-trigger { width: 100%; padding: 10px 14px; background: var(--input-bg); border: 1px solid var(--glass-border); border-radius: 10px; color: var(--text-main); font-size: 0.9rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
         .custom-options { position: absolute; display: none; top: 100%; left: 0; right: 0; margin-top: 5px; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 10px; box-shadow: var(--card-shadow); z-index: 99; backdrop-filter: blur(16px); max-height: 200px; overflow-y: auto; padding: 8px; }
@@ -147,7 +154,13 @@
     <div id="loginPage" class="card">
         <h2>Absensi Host Live</h2>
         <div class="form-group"><label>Username (Nama)</label><input type="text" id="loginUsername" placeholder="Masukkan nama Anda..."></div>
-        <div class="form-group"><label>Password</label><input type="password" id="loginPassword" placeholder="••••••••"></div>
+        <div class="form-group">
+            <label>Password</label>
+            <div class="password-container">
+                <input type="password" id="loginPassword" placeholder="••••••••">
+                <button type="button" class="password-toggle" onclick="togglePassword('loginPassword', this)">👁️</button>
+            </div>
+        </div>
         <button class="btn-primary" onclick="login()">Masuk</button>
         <button class="btn-outline" onclick="nav('registerPage')">Daftar Host Baru</button>
         <a class="link-text" onclick="nav('forgotPage')">Lupa Password?</a>
@@ -155,7 +168,13 @@
     <div id="registerPage" class="card hidden">
         <h2>Pendaftaran Host</h2>
         <div class="form-group"><label>Username (Isi dengan Nama Anda)</label><input type="text" id="regUsername" placeholder="Contoh: Riko"></div>
-        <div class="form-group"><label>Password</label><input type="password" id="regPassword" placeholder="Buat password..."></div>
+        <div class="form-group">
+            <label>Password</label>
+            <div class="password-container">
+                <input type="password" id="regPassword" placeholder="Buat password...">
+                <button type="button" class="password-toggle" onclick="togglePassword('regPassword', this)">👁️</button>
+            </div>
+        </div>
         <button class="btn-primary" onclick="register()">Daftar</button><button class="btn-outline" onclick="nav('loginPage')">Kembali</button>
     </div>
     <div id="forgotPage" class="card hidden">
@@ -364,7 +383,6 @@
         } catch(e) { console.error(e); Swal.fire('Error', 'Gagal menyimpan ke server.', 'error'); return false; }
     };
 
-    // Fungsi Kompresi Gambar untuk menjaga Database tetap ringan
     window.compressImage = function(file, callback) {
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -383,6 +401,13 @@
         reader.readAsDataURL(file);
     }
 
+    // --- FITUR MATA PASSWORD ---
+    window.togglePassword = function(inputId, btn) {
+        const input = document.getElementById(inputId);
+        if (input.type === 'password') { input.type = 'text'; btn.innerHTML = '🙈'; } 
+        else { input.type = 'password'; btn.innerHTML = '👁️'; }
+    };
+
     function clearSemuaInput() { document.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]), select').forEach(el => el.value = ''); window.sessionImages = {}; }
     function formatDurasi(d) { if (d < 60) return `${d} dtk`; const j = Math.floor(d/3600), m = Math.floor((d%3600)/60), s = d%60; let r = []; if(j>0) r.push(`${j} j`); if(m>0) r.push(`${m} m`); if(s>0) r.push(`${s} dtk`); return r.join(' '); }
     function formatRp(angka) { return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka || 0); }
@@ -395,15 +420,29 @@
     window.nav = function(id) { clearSemuaInput(); document.querySelectorAll('.container > .card, #adminPage').forEach(c => c.classList.add('hidden')); document.getElementById('mainContainer').classList.remove('hidden'); if(id === 'adminPage') document.getElementById('mainContainer').classList.add('hidden'); const target = document.getElementById(id); target.classList.remove('hidden'); anime({ targets: target, opacity: [0, 1], translateY: [20, 0], duration: 500, easing: 'easeOutQuart' }); }
     window.switchAdminTab = function(tN) { document.querySelectorAll('.sidebar-menu li').forEach(li => li.classList.remove('active')); document.getElementById(`menu-${tN}`).classList.add('active'); document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active')); document.getElementById(`tab-${tN}`).classList.add('active'); if(tN === 'grafik') { updateGrafikDropdown(); window.updateGrafik(); } }
 
-    window.register = function() { const u = document.getElementById('regUsername').value.trim(), p = document.getElementById('regPassword').value.trim(); if(!u || !p) return Swal.fire({icon:'warning',text:'Isi Nama dan Password!'}); if(users.find(x => x.u === u)) return Swal.fire({icon:'error',text:'Nama sudah terdaftar!'}); users.push({u, p, r:'host', targetMingguan: 0}); Swal.fire({title:'Menyimpan...', didOpen:()=>Swal.showLoading()}); sync().then((ok) => { if(ok) Swal.fire({icon:'success',title:'Berhasil',timer:1500,showConfirmButton:false}).then(()=>window.nav('loginPage')); }); }
-    window.login = function() {
-        const u = document.getElementById('loginUsername').value.trim(), p = document.getElementById('loginPassword').value.trim(); const user = users.find(x => x.u === u && x.p === p);
-        if(!user) return Swal.fire({icon:'error',text:'Nama atau password salah!'});
-        localStorage.setItem('activeUser', u);
-        if(user.r === 'admin') { window.nav('adminPage'); initAdmin(); }
-        else { document.getElementById('hostNameDisplay').innerText = u; window.updateHostProgress(); window.nav('hostPage'); checkActiveSession(); renderHistory(); document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; }
+    window.register = function() { 
+        const u = document.getElementById('regUsername').value.trim(), p = document.getElementById('regPassword').value.trim(); 
+        if(!u || !p) return Swal.fire({icon:'warning',text:'Isi Nama dan Password!'}); 
+        if(users.find(x => x.u.toLowerCase() === u.toLowerCase())) return Swal.fire({icon:'error',text:'Nama sudah terdaftar!'}); 
+        users.push({u, p, r:'host', targetMingguan: 0}); Swal.fire({title:'Menyimpan...', didOpen:()=>Swal.showLoading()}); sync().then((ok) => { if(ok) Swal.fire({icon:'success',title:'Berhasil',timer:1500,showConfirmButton:false}).then(()=>window.nav('loginPage')); }); 
     }
-    window.ajukanReset = function() { const u = document.getElementById('forgotUsername').value.trim(); if(!u) return; if(!users.find(x => x.u === u)) return Swal.fire({icon:'error',text:'Nama tidak ditemukan!'}); if(!resetRequests.includes(u)) { resetRequests.push(u); Swal.fire({title:'Mengirim...', didOpen:()=>Swal.showLoading()}); sync().then((ok) => { if(ok) Swal.fire({icon:'success',title:'Terkirim',timer:1500,showConfirmButton:false}).then(()=>window.nav('loginPage')); }); } }
+    
+    window.login = function() {
+        const u = document.getElementById('loginUsername').value.trim(), p = document.getElementById('loginPassword').value.trim(); 
+        const user = users.find(x => x.u.toLowerCase() === u.toLowerCase() && x.p === p);
+        if(!user) return Swal.fire({icon:'error',text:'Nama atau password salah!'});
+        localStorage.setItem('activeUser', user.u);
+        if(user.r === 'admin') { window.nav('adminPage'); initAdmin(); }
+        else { document.getElementById('hostNameDisplay').innerText = user.u; window.updateHostProgress(); window.nav('hostPage'); checkActiveSession(); renderHistory(); document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; }
+    }
+    
+    window.ajukanReset = function() { 
+        const u = document.getElementById('forgotUsername').value.trim(); if(!u) return; 
+        const user = users.find(x => x.u.toLowerCase() === u.toLowerCase());
+        if(!user) return Swal.fire({icon:'error',text:'Nama tidak ditemukan!'}); 
+        if(!resetRequests.includes(user.u)) { resetRequests.push(user.u); Swal.fire({title:'Mengirim...', didOpen:()=>Swal.showLoading()}); sync().then((ok) => { if(ok) Swal.fire({icon:'success',title:'Terkirim',timer:1500,showConfirmButton:false}).then(()=>window.nav('loginPage')); }); } else { Swal.fire({icon:'success',title:'Terkirim',timer:1500,showConfirmButton:false}).then(()=>window.nav('loginPage')); }
+    }
+    
     window.logout = function() { localStorage.removeItem('activeUser'); clearInterval(timerInterval); window.nav('loginPage'); }
 
     window.updateHostProgress = function() {
@@ -455,7 +494,7 @@
     }
 
     window.selesai = function() {
-        if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem masih memuat data server.', 'warning');
+        if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem masih memuat data server, pastikan koneksi stabil.', 'warning');
         const u = localStorage.getItem('activeUser'), sess = JSON.parse(localStorage.getItem('sess_'+u));
         const missing = sess.plats.filter(p => !window.sessionImages[p]);
         if(missing.length > 0) return Swal.fire({icon:'warning', title: 'Belum Lengkap!', text: `Harap upload SS untuk: ${missing.join(', ')}`});
@@ -468,10 +507,7 @@
         
         Swal.fire({ title: 'Menyimpan Data...', text: 'Mengirim ke server, JANGAN tutup aplikasi!', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
         sync().then((ok) => {
-            if(ok) {
-                localStorage.removeItem('sess_'+u); clearInterval(timerInterval); window.sessionImages = {}; document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; 
-                Swal.fire({icon:'success',title:'Disimpan!'}); checkActiveSession(); renderHistory(); window.updateHostProgress();
-            }
+            if(ok) { localStorage.removeItem('sess_'+u); clearInterval(timerInterval); window.sessionImages = {}; document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; Swal.fire({icon:'success',title:'Disimpan!'}); checkActiveSession(); renderHistory(); window.updateHostProgress(); }
         });
     }
 
@@ -488,7 +524,7 @@
                     const regex = /(?:Rp|IDR|\$)?\s*([0-9]{1,3}(?:\.[0-9]{3})*(?:\,[0-9]{1,2})?)/gi; let match; let highest = 0;
                     while ((match = regex.exec(text)) !== null) { let val = parseInt(match[1].replace(/\./g, '').replace(/\,/g, '')); if(!isNaN(val) && val > highest) highest = val; }
                     
-                    Swal.fire({ title: 'Konfirmasi GMV Baru', text: `Platform: ${platName}`, input: 'number', inputValue: highest > 100 ? highest : '', imageUrl: compressedB64, imageHeight: 200, showCancelButton: true, confirmButtonText: 'Simpan Perubahan' }).then(res => {
+                    Swal.fire({ title: 'Konfirmasi GMV Baru', text: `Platform: ${platName}. Edit jika AI salah.`, input: 'number', inputValue: highest > 100 ? highest : '', imageUrl: compressedB64, imageHeight: 200, showCancelButton: true, confirmButtonText: 'Simpan Perubahan' }).then(res => {
                         if(res.isConfirmed) {
                             const newGmv = parseInt(res.value || 0); const session = data.find(d => String(d.id) === String(idStr));
                             if(session) {
@@ -553,7 +589,7 @@
 
     window.hapusRiwayat = function(id) { 
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
-        Swal.fire({title:'Hapus Data Riwayat?', icon:'warning',showCancelButton:true,confirmButtonColor:'#e11d48'}).then((r)=>{ if(r.isConfirmed){ data = data.filter(x => String(x.id) !== String(id)); Swal.fire({title:'Menghapus...', didOpen:()=>Swal.showLoading()}); sync().then((ok) => { if(ok) { Swal.fire('Terhapus!','','success'); window.applyFilters(); renderAnalisaTarget(); window.updateGrafik(); } }); } }); 
+        Swal.fire({title:'Hapus Data Riwayat?', icon:'warning',showCancelButton:true,confirmButtonColor:'#e11d48'}).then((r)=>{ if(r.isConfirmed){ data = data.filter(x => String(x.id) !== String(id)); Swal.fire({title:'Menghapus...', didOpen:()=>Swal.showLoading()}); sync().then((ok) => { if(ok) { Swal.fire('Terhapus!','','success'); window.applyFilters(); renderAnalisaTarget(); window.updateGrafik(); window.updateHostProgress(); } }); } }); 
     }
 
     function renderHistory() {
@@ -610,8 +646,8 @@
             const jD = XLSX.utils.sheet_to_json(XLSX.read(new Uint8Array(e.target.result), {type:'array'}).Sheets[XLSX.read(new Uint8Array(e.target.result), {type:'array'}).SheetNames[0]], {raw:false});
             if(jD.length===0) return Swal.fire('Error','Excel kosong.','error');
             let b = 0; const dI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=";
-            jD.forEach(row => {
-                const h = row['Username Host']||row['h'], t = row['Tanggal (YYYY-MM-DD)']||row['t'], p = row['Platform']||row['p'], m = row['Jam Mulai (HH:mm:ss)']||row['m'], a = row['Jam Selesai (HH:mm:ss)']||row['a'], g = parseInt(row['GMV Total (Rp)'] || row['g'] || 0);
+            jD.forEach(r => {
+                const h = r['Username Host']||r['h'], t = r['Tanggal (YYYY-MM-DD)']||r['t'], p = r['Platform']||r['p'], m = r['Jam Mulai (HH:mm:ss)']||r['m'], a = r['Jam Selesai (HH:mm:ss)']||r['a'], g = parseInt(r['GMV Total (Rp)'] || r['g'] || 0);
                 if(h&&t&&p&&m&&a) {
                     const sT = new Date(`${t}T${m}`).getTime(), eT = new Date(`${t}T${a}`).getTime();
                     if(!isNaN(sT)&&!isNaN(eT)) { data.push({ id:Date.now()+Math.random(), host:h, plat:p, timestamp:sT, tgl:t, mulai:m, akhir:a, detik:Math.floor((eT-sT)/1000), img:dI, totalGmv:g }); b++; }
@@ -696,7 +732,7 @@
     }
 
     window.exportExcelFull = async function() {
-        if(window.flattenedFilteredData.length===0) return Swal.fire('Kosong','Tidak ada data.','info');
+        if(window.flattenedFilteredData.length===0) return Swal.fire('Kosong','Tidak ada data didownload.','info');
         const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('Rekap Detail');
         ws.columns = [{header:'Host',key:'host',width:20},{header:'Tanggal',key:'tgl',width:15},{header:'Platform',key:'plat',width:15},{header:'Jam Mulai',key:'mulai',width:15},{header:'Jam Selesai',key:'akhir',width:15},{header:'GMV (Rp)',key:'gmv',width:20},{header:'Durasi',key:'durasi',width:18}];
         const hR = ws.getRow(1); hR.font={bold:true,color:{argb:'FFFFFFFF'}}; hR.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF5A67D8'}};
