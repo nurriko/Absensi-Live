@@ -82,7 +82,7 @@
 
         .link-text { color: var(--primary); text-decoration: none; cursor: pointer; font-size: 0.85rem; text-align: center; display: block; margin-top: 15px; font-weight: 600;}
         
-        /* === FITUR BARU: MATA PASSWORD === */
+        /* === MATA PASSWORD === */
         .password-container { position: relative; display: block; }
         .password-container input { padding-right: 40px; }
         .password-toggle { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: auto; background: transparent; border: none; padding: 0; color: var(--text-dim); font-size: 1.2rem; cursor: pointer; box-shadow: none !important; margin: 0;}
@@ -351,6 +351,7 @@
     let data = []; let resetRequests = []; let filteredDataCache = []; let timerInterval;
     window.sessionImages = {};
     
+    // --- SAFETY LOCK (MENCEGAH RACE CONDITION) ---
     let isDataLoaded = false; let isUsersLoaded = false;
 
     function showSyncStatus(show) { const s = document.getElementById('syncStatus'); if(show) { s.style.display = 'block'; } else { setTimeout(()=> s.style.display = 'none', 500); } }
@@ -364,7 +365,13 @@
     });
 
     onValue(ref(db, 'absensi_data'), (s) => { 
-        isDataLoaded = true; if(s.exists()) data = s.val(); else data = []; 
+        isDataLoaded = true; 
+        if(s.exists()) {
+            const val = s.val();
+            let temp = Array.isArray(val) ? val : Object.values(val);
+            data = temp.filter(d => d !== null && d !== undefined);
+        } else { data = []; }
+        
         if(!document.getElementById('adminPage').classList.contains('hidden')) { window.applyFilters(); renderAnalisaTarget(); window.updateGrafik(); } 
         if(!document.getElementById('hostPage').classList.contains('hidden')) { renderHistory(); window.updateHostProgress(); }
         if(isDataLoaded && isUsersLoaded) showSyncStatus(false);
@@ -383,25 +390,26 @@
         } catch(e) { console.error(e); Swal.fire('Error', 'Gagal menyimpan ke server.', 'error'); return false; }
     };
 
+    // --- KOMPRESI EKSTREM (ANTI-LAG) ---
     window.compressImage = function(file, callback) {
         const reader = new FileReader();
         reader.onload = function(e) {
             const img = new Image();
             img.onload = function() {
-                const canvas = document.createElement('canvas'); const MAX_DIM = 700;
+                const canvas = document.createElement('canvas'); const MAX_DIM = 400; // Kompresi diperkecil jadi 400px
                 let width = img.width, height = img.height;
                 if (width > height && width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; }
                 else if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; }
                 canvas.width = width; canvas.height = height;
                 const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
-                callback(canvas.toDataURL('image/jpeg', 0.6));
+                callback(canvas.toDataURL('image/jpeg', 0.4)); // Kualitas dikurangi jadi 40%
             }
             img.src = e.target.result;
         }
         reader.readAsDataURL(file);
     }
 
-    // --- FITUR MATA PASSWORD ---
+    // --- MATA PASSWORD ---
     window.togglePassword = function(inputId, btn) {
         const input = document.getElementById(inputId);
         if (input.type === 'password') { input.type = 'text'; btn.innerHTML = '🙈'; } 
@@ -420,6 +428,7 @@
     window.nav = function(id) { clearSemuaInput(); document.querySelectorAll('.container > .card, #adminPage').forEach(c => c.classList.add('hidden')); document.getElementById('mainContainer').classList.remove('hidden'); if(id === 'adminPage') document.getElementById('mainContainer').classList.add('hidden'); const target = document.getElementById(id); target.classList.remove('hidden'); anime({ targets: target, opacity: [0, 1], translateY: [20, 0], duration: 500, easing: 'easeOutQuart' }); }
     window.switchAdminTab = function(tN) { document.querySelectorAll('.sidebar-menu li').forEach(li => li.classList.remove('active')); document.getElementById(`menu-${tN}`).classList.add('active'); document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active')); document.getElementById(`tab-${tN}`).classList.add('active'); if(tN === 'grafik') { updateGrafikDropdown(); window.updateGrafik(); } }
 
+    // --- FITUR LOGIN CASE-INSENSITIVE ---
     window.register = function() { 
         const u = document.getElementById('regUsername').value.trim(), p = document.getElementById('regPassword').value.trim(); 
         if(!u || !p) return Swal.fire({icon:'warning',text:'Isi Nama dan Password!'}); 
@@ -493,6 +502,7 @@
         }).catch(err => { statusEl.innerHTML = '❌ Gagal. Ketik manual.'; statusEl.style.color = 'var(--accent)'; });
     }
 
+    // --- PENGIRIMAN SUPER RINGAN (SINGLE NODE SET) ---
     window.selesai = function() {
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem masih memuat data server, pastikan koneksi stabil.', 'warning');
         const u = localStorage.getItem('activeUser'), sess = JSON.parse(localStorage.getItem('sess_'+u));
@@ -503,11 +513,17 @@
         sess.plats.forEach(p => { const gmvVal = parseInt(document.getElementById(`gmv_${p}`).value || 0); totalGmvAccumulated += gmvVal; platformsData.push({ plat: p, img: window.sessionImages[p], gmv: gmvVal }); });
         const end = Date.now(), detik = Math.floor((end - sess.start) / 1000);
         
-        data.push({ id: Date.now() + Math.random(), host: u, plat: sess.plats.join(', '), timestamp: sess.start, tgl: new Date(sess.start).toLocaleDateString('en-CA'), mulai: new Date(sess.start).toLocaleTimeString('en-GB'), akhir: new Date(end).toLocaleTimeString('en-GB'), detik: detik, totalGmv: totalGmvAccumulated, platformsData: platformsData });
+        const newRecord = { id: Date.now() + Math.random(), host: u, plat: sess.plats.join(', '), timestamp: sess.start, tgl: new Date(sess.start).toLocaleDateString('en-CA'), mulai: new Date(sess.start).toLocaleTimeString('en-GB'), akhir: new Date(end).toLocaleTimeString('en-GB'), detik: detik, totalGmv: totalGmvAccumulated, platformsData: platformsData };
         
         Swal.fire({ title: 'Menyimpan Data...', text: 'Mengirim ke server, JANGAN tutup aplikasi!', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
-        sync().then((ok) => {
-            if(ok) { localStorage.removeItem('sess_'+u); clearInterval(timerInterval); window.sessionImages = {}; document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; Swal.fire({icon:'success',title:'Disimpan!'}); checkActiveSession(); renderHistory(); window.updateHostProgress(); }
+        
+        // Upload HANYA record baru ini ke Index Terakhir (Beban turun drastis)
+        const newIndex = data.length;
+        set(ref(db, `absensi_data/${newIndex}`), newRecord).then(() => {
+            localStorage.removeItem('sess_'+u); clearInterval(timerInterval); window.sessionImages = {}; document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; 
+            Swal.fire({icon:'success',title:'Disimpan!'}); 
+        }).catch(err => {
+            Swal.fire('Error', 'Gagal terhubung ke server. Coba lagi.', 'error');
         });
     }
 
@@ -526,8 +542,9 @@
                     
                     Swal.fire({ title: 'Konfirmasi GMV Baru', text: `Platform: ${platName}. Edit jika AI salah.`, input: 'number', inputValue: highest > 100 ? highest : '', imageUrl: compressedB64, imageHeight: 200, showCancelButton: true, confirmButtonText: 'Simpan Perubahan' }).then(res => {
                         if(res.isConfirmed) {
-                            const newGmv = parseInt(res.value || 0); const session = data.find(d => String(d.id) === String(idStr));
-                            if(session) {
+                            const newGmv = parseInt(res.value || 0); const index = data.findIndex(d => String(d.id) === String(idStr));
+                            if(index !== -1) {
+                                const session = data[index];
                                 if(session.platformsData && session.platformsData.length > 0) {
                                     const pData = session.platformsData.find(p => p.plat === platName);
                                     if(pData) { pData.img = compressedB64; pData.gmv = newGmv; }
@@ -535,7 +552,9 @@
                                 } else { session.img = compressedB64; session.gmv = newGmv; session.totalGmv = newGmv; }
                                 
                                 Swal.fire({title:'Menyimpan...', didOpen:()=>Swal.showLoading()});
-                                sync().then((ok) => { if(ok) { Swal.fire('Tersimpan', 'Update Berhasil.', 'success'); if(!document.getElementById('hostPage').classList.contains('hidden')) renderHistory(); if(!document.getElementById('adminPage').classList.contains('hidden')) window.applyFilters(); } });
+                                set(ref(db, `absensi_data/${index}`), session).then(() => {
+                                    Swal.fire('Tersimpan', 'Update Berhasil.', 'success');
+                                }).catch(err => Swal.fire('Error', 'Koneksi terputus', 'error'));
                             }
                         }
                     });
@@ -546,7 +565,8 @@
 
     window.editGmvAdmin = function(idStr, platName) {
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
-        const session = data.find(d => String(d.id) === String(idStr)); if(!session) return;
+        const index = data.findIndex(d => String(d.id) === String(idStr)); if(index === -1) return;
+        const session = data[index];
         let currentGmv = session.platformsData ? (session.platformsData.find(p => p.plat === platName)?.gmv || 0) : (session.totalGmv || session.gmv || 0);
 
         Swal.fire({ title: `Koreksi GMV (${platName})`, input: 'number', inputValue: currentGmv, showCancelButton: true, confirmButtonText: 'Simpan' }).then((res) => {
@@ -557,15 +577,19 @@
                     if(pData) pData.gmv = newGmv;
                     session.totalGmv = session.platformsData.reduce((s, p) => s + p.gmv, 0);
                 } else { session.gmv = newGmv; session.totalGmv = newGmv; }
+                
                 Swal.fire({title:'Menyimpan...', didOpen:()=>Swal.showLoading()});
-                sync().then((ok) => { if(ok) { Swal.fire('Berhasil!', '', 'success'); window.applyFilters(); window.updateGrafik(); } });
+                set(ref(db, `absensi_data/${index}`), session).then(() => {
+                    Swal.fire('Berhasil!', '', 'success');
+                });
             }
         });
     }
 
     window.editWaktuAdmin = function(idStr) {
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
-        const session = data.find(d => String(d.id) === String(idStr)); if(!session) return;
+        const index = data.findIndex(d => String(d.id) === String(idStr)); if(index === -1) return;
+        const session = data[index];
 
         Swal.fire({
             title: 'Edit Waktu',
@@ -582,14 +606,23 @@
                 session.mulai = fMulai; session.akhir = fAkhir; session.detik = Math.floor((endTs - startTs) / 1000); session.timestamp = startTs;
                 
                 Swal.fire({title:'Menyimpan...', didOpen:()=>Swal.showLoading()});
-                sync().then((ok) => { if(ok) { Swal.fire('Berhasil!', '', 'success'); window.applyFilters(); window.updateGrafik(); renderAnalisaTarget(); } });
+                set(ref(db, `absensi_data/${index}`), session).then(() => {
+                    Swal.fire('Berhasil!', '', 'success');
+                });
             }
         });
     }
 
+    // Hanya hapus yang merombak seluruh Array
     window.hapusRiwayat = function(id) { 
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
-        Swal.fire({title:'Hapus Data Riwayat?', icon:'warning',showCancelButton:true,confirmButtonColor:'#e11d48'}).then((r)=>{ if(r.isConfirmed){ data = data.filter(x => String(x.id) !== String(id)); Swal.fire({title:'Menghapus...', didOpen:()=>Swal.showLoading()}); sync().then((ok) => { if(ok) { Swal.fire('Terhapus!','','success'); window.applyFilters(); renderAnalisaTarget(); window.updateGrafik(); window.updateHostProgress(); } }); } }); 
+        Swal.fire({title:'Hapus Data Riwayat?', icon:'warning',showCancelButton:true,confirmButtonColor:'#e11d48'}).then((r)=>{ 
+            if(r.isConfirmed){ 
+                data = data.filter(x => String(x.id) !== String(id)); 
+                Swal.fire({title:'Menghapus...', didOpen:()=>Swal.showLoading()}); 
+                sync().then((ok) => { if(ok) Swal.fire('Terhapus!','','success'); }); 
+            } 
+        }); 
     }
 
     function renderHistory() {
@@ -646,8 +679,8 @@
             const jD = XLSX.utils.sheet_to_json(XLSX.read(new Uint8Array(e.target.result), {type:'array'}).Sheets[XLSX.read(new Uint8Array(e.target.result), {type:'array'}).SheetNames[0]], {raw:false});
             if(jD.length===0) return Swal.fire('Error','Excel kosong.','error');
             let b = 0; const dI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=";
-            jD.forEach(r => {
-                const h = r['Username Host']||r['h'], t = r['Tanggal (YYYY-MM-DD)']||r['t'], p = r['Platform']||r['p'], m = r['Jam Mulai (HH:mm:ss)']||r['m'], a = r['Jam Selesai (HH:mm:ss)']||r['a'], g = parseInt(r['GMV Total (Rp)'] || r['g'] || 0);
+            jD.forEach(row => {
+                const h = row['Username Host']||row['h'], t = row['Tanggal (YYYY-MM-DD)']||row['t'], p = row['Platform']||row['p'], m = row['Jam Mulai (HH:mm:ss)']||row['m'], a = row['Jam Selesai (HH:mm:ss)']||row['a'], g = parseInt(row['GMV Total (Rp)'] || row['g'] || 0);
                 if(h&&t&&p&&m&&a) {
                     const sT = new Date(`${t}T${m}`).getTime(), eT = new Date(`${t}T${a}`).getTime();
                     if(!isNaN(sT)&&!isNaN(eT)) { data.push({ id:Date.now()+Math.random(), host:h, plat:p, timestamp:sT, tgl:t, mulai:m, akhir:a, detik:Math.floor((eT-sT)/1000), img:dI, totalGmv:g }); b++; }
@@ -732,7 +765,7 @@
     }
 
     window.exportExcelFull = async function() {
-        if(window.flattenedFilteredData.length===0) return Swal.fire('Kosong','Tidak ada data didownload.','info');
+        if(window.flattenedFilteredData.length===0) return Swal.fire('Kosong','Tidak ada data.','info');
         const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('Rekap Detail');
         ws.columns = [{header:'Host',key:'host',width:20},{header:'Tanggal',key:'tgl',width:15},{header:'Platform',key:'plat',width:15},{header:'Jam Mulai',key:'mulai',width:15},{header:'Jam Selesai',key:'akhir',width:15},{header:'GMV (Rp)',key:'gmv',width:20},{header:'Durasi',key:'durasi',width:18}];
         const hR = ws.getRow(1); hR.font={bold:true,color:{argb:'FFFFFFFF'}}; hR.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF5A67D8'}};
