@@ -18,7 +18,6 @@
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     
     <style>
-        /* === TEMA GLOBAL === */
         :root {
             --font-main: 'Plus Jakarta Sans', sans-serif;
             --primary: #5a67d8; --primary-hover: #4c51bf; --accent: #f43f5e;
@@ -128,7 +127,6 @@
         .scan-status { font-size: 0.75rem; font-weight: 600; text-align: center; margin-top: 8px; min-height: 15px;}
         .gmv-input { margin-top: 10px; }
 
-        /* Sync Status Indicator */
         #syncStatus { position: fixed; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 30px; font-size: 0.8rem; font-weight: 600; z-index: 9999; display: none; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
 
         @media (max-width: 900px) {
@@ -334,28 +332,20 @@
     let data = []; let resetRequests = []; let filteredDataCache = []; let timerInterval;
     window.sessionImages = {};
     
-    // --- SAFETY LOCK ---
-    let isDataLoaded = false;
-    let isUsersLoaded = false;
+    let isDataLoaded = false; let isUsersLoaded = false;
 
-    function showSyncStatus(show) {
-        const s = document.getElementById('syncStatus');
-        if(show) { s.style.display = 'block'; } else { setTimeout(()=> s.style.display = 'none', 500); }
-    }
-
+    function showSyncStatus(show) { const s = document.getElementById('syncStatus'); if(show) { s.style.display = 'block'; } else { setTimeout(()=> s.style.display = 'none', 500); } }
     showSyncStatus(true);
 
     onValue(ref(db, 'users'), (s) => { 
-        isUsersLoaded = true;
-        if(s.exists()) users = s.val(); 
+        isUsersLoaded = true; if(s.exists()) users = s.val(); 
         if(!document.getElementById('adminPage').classList.contains('hidden')) { renderDaftarUser(); renderAnalisaTarget(); updateFilterCheckboxes(); updateGrafikDropdown(); } 
         if(!document.getElementById('hostPage').classList.contains('hidden')) { window.updateHostProgress(); }
         if(isDataLoaded && isUsersLoaded) showSyncStatus(false);
     });
 
     onValue(ref(db, 'absensi_data'), (s) => { 
-        isDataLoaded = true;
-        if(s.exists()) data = s.val(); else data = []; 
+        isDataLoaded = true; if(s.exists()) data = s.val(); else data = []; 
         if(!document.getElementById('adminPage').classList.contains('hidden')) { window.applyFilters(); renderAnalisaTarget(); window.updateGrafik(); } 
         if(!document.getElementById('hostPage').classList.contains('hidden')) { renderHistory(); window.updateHostProgress(); }
         if(isDataLoaded && isUsersLoaded) showSyncStatus(false);
@@ -366,16 +356,32 @@
         if(!document.getElementById('adminPage').classList.contains('hidden')) renderResetRequests();
     });
 
-    const sync = () => { 
-        if(!isDataLoaded || !isUsersLoaded) {
-            Swal.fire('⏳ Tunggu Sebentar', 'Sistem sedang menyinkronkan data dari server.', 'warning');
-            return false;
-        }
-        set(ref(db, 'users'), users); 
-        set(ref(db, 'absensi_data'), data); 
-        set(ref(db, 'reset_requests'), resetRequests); 
-        return true;
+    const sync = async () => { 
+        if(!isDataLoaded || !isUsersLoaded) { Swal.fire('⏳ Tunggu Sebentar', 'Sistem sedang menyinkronkan data dari server.', 'warning'); return false; }
+        try {
+            await Promise.all([ set(ref(db, 'users'), users), set(ref(db, 'absensi_data'), data), set(ref(db, 'reset_requests'), resetRequests) ]);
+            return true;
+        } catch(e) { console.error(e); Swal.fire('Error', 'Gagal menyimpan ke server.', 'error'); return false; }
     };
+
+    // Fungsi Kompresi Gambar untuk menjaga Database tetap ringan
+    window.compressImage = function(file, callback) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                const canvas = document.createElement('canvas'); const MAX_DIM = 700;
+                let width = img.width, height = img.height;
+                if (width > height && width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; }
+                else if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; }
+                canvas.width = width; canvas.height = height;
+                const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
+                callback(canvas.toDataURL('image/jpeg', 0.6));
+            }
+            img.src = e.target.result;
+        }
+        reader.readAsDataURL(file);
+    }
 
     function clearSemuaInput() { document.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]), select').forEach(el => el.value = ''); window.sessionImages = {}; }
     function formatDurasi(d) { if (d < 60) return `${d} dtk`; const j = Math.floor(d/3600), m = Math.floor((d%3600)/60), s = d%60; let r = []; if(j>0) r.push(`${j} j`); if(m>0) r.push(`${m} m`); if(s>0) r.push(`${s} dtk`); return r.join(' '); }
@@ -389,53 +395,32 @@
     window.nav = function(id) { clearSemuaInput(); document.querySelectorAll('.container > .card, #adminPage').forEach(c => c.classList.add('hidden')); document.getElementById('mainContainer').classList.remove('hidden'); if(id === 'adminPage') document.getElementById('mainContainer').classList.add('hidden'); const target = document.getElementById(id); target.classList.remove('hidden'); anime({ targets: target, opacity: [0, 1], translateY: [20, 0], duration: 500, easing: 'easeOutQuart' }); }
     window.switchAdminTab = function(tN) { document.querySelectorAll('.sidebar-menu li').forEach(li => li.classList.remove('active')); document.getElementById(`menu-${tN}`).classList.add('active'); document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active')); document.getElementById(`tab-${tN}`).classList.add('active'); if(tN === 'grafik') { updateGrafikDropdown(); window.updateGrafik(); } }
 
-    window.register = function() { const u = document.getElementById('regUsername').value.trim(), p = document.getElementById('regPassword').value.trim(); if(!u || !p) return Swal.fire({icon:'warning',text:'Isi Nama dan Password!'}); if(users.find(x => x.u === u)) return Swal.fire({icon:'error',text:'Nama sudah terdaftar!'}); users.push({u, p, r:'host', targetMingguan: 0}); if(sync()) Swal.fire({icon:'success',title:'Berhasil',timer:1500,showConfirmButton:false}).then(()=>window.nav('loginPage')); }
+    window.register = function() { const u = document.getElementById('regUsername').value.trim(), p = document.getElementById('regPassword').value.trim(); if(!u || !p) return Swal.fire({icon:'warning',text:'Isi Nama dan Password!'}); if(users.find(x => x.u === u)) return Swal.fire({icon:'error',text:'Nama sudah terdaftar!'}); users.push({u, p, r:'host', targetMingguan: 0}); Swal.fire({title:'Menyimpan...', didOpen:()=>Swal.showLoading()}); sync().then((ok) => { if(ok) Swal.fire({icon:'success',title:'Berhasil',timer:1500,showConfirmButton:false}).then(()=>window.nav('loginPage')); }); }
     window.login = function() {
         const u = document.getElementById('loginUsername').value.trim(), p = document.getElementById('loginPassword').value.trim(); const user = users.find(x => x.u === u && x.p === p);
         if(!user) return Swal.fire({icon:'error',text:'Nama atau password salah!'});
         localStorage.setItem('activeUser', u);
         if(user.r === 'admin') { window.nav('adminPage'); initAdmin(); }
-        else { 
-            document.getElementById('hostNameDisplay').innerText = u; 
-            window.updateHostProgress();
-            window.nav('hostPage'); checkActiveSession(); renderHistory(); document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; 
-        }
+        else { document.getElementById('hostNameDisplay').innerText = u; window.updateHostProgress(); window.nav('hostPage'); checkActiveSession(); renderHistory(); document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; }
     }
-    window.ajukanReset = function() { const u = document.getElementById('forgotUsername').value.trim(); if(!u) return; if(!users.find(x => x.u === u)) return Swal.fire({icon:'error',text:'Nama tidak ditemukan!'}); if(!resetRequests.includes(u)) { resetRequests.push(u); if(sync()) Swal.fire({icon:'success',title:'Terkirim',timer:1500,showConfirmButton:false}).then(()=>window.nav('loginPage')); } }
+    window.ajukanReset = function() { const u = document.getElementById('forgotUsername').value.trim(); if(!u) return; if(!users.find(x => x.u === u)) return Swal.fire({icon:'error',text:'Nama tidak ditemukan!'}); if(!resetRequests.includes(u)) { resetRequests.push(u); Swal.fire({title:'Mengirim...', didOpen:()=>Swal.showLoading()}); sync().then((ok) => { if(ok) Swal.fire({icon:'success',title:'Terkirim',timer:1500,showConfirmButton:false}).then(()=>window.nav('loginPage')); }); } }
     window.logout = function() { localStorage.removeItem('activeUser'); clearInterval(timerInterval); window.nav('loginPage'); }
 
     window.updateHostProgress = function() {
-        const u = localStorage.getItem('activeUser'); if(!u) return;
-        const user = users.find(x => x.u === u);
-        const tM = user ? (user.targetMingguan || 0) : 0;
-        const tD = document.getElementById('hostTargetDisplay'), pD = document.getElementById('hostProgressDisplay');
-        
+        const u = localStorage.getItem('activeUser'); if(!u) return; const user = users.find(x => x.u === u);
+        const tM = user ? (user.targetMingguan || 0) : 0; const tD = document.getElementById('hostTargetDisplay'), pD = document.getElementById('hostProgressDisplay');
         if(tM > 0) {
             tD.innerText = `${tM} Jam / Mgg`;
-            const wR = getWeekRange();
-            const dM = data.filter(d => d.host === u && d.timestamp >= wR.start && d.timestamp <= wR.end).reduce((s, c) => s + c.detik, 0);
-            const jM = (dM / 3600).toFixed(1);
-            const sisa = (tM - parseFloat(jM)).toFixed(1);
-
-            if(sisa > 0) {
-                pD.innerHTML = `⚠️ Kurang <span style="color:var(--accent); font-weight:800;">${sisa} Jam</span> lagi minggu ini`;
-                pD.style.color = "var(--warning)";
-            } else {
-                pD.innerHTML = `✅ Target Minggu Ini Tercapai! (${jM} Jam)`;
-                pD.style.color = "#10b981";
-            }
-        } else {
-            tD.innerText = "Belum diatur"; pD.innerHTML = "";
-        }
+            const wR = getWeekRange(); const dM = data.filter(d => d.host === u && d.timestamp >= wR.start && d.timestamp <= wR.end).reduce((s, c) => s + c.detik, 0);
+            const jM = (dM / 3600).toFixed(1); const sisa = (tM - parseFloat(jM)).toFixed(1);
+            if(sisa > 0) { pD.innerHTML = `⚠️ Kurang <span style="color:var(--accent); font-weight:800;">${sisa} Jam</span> lagi minggu ini`; pD.style.color = "var(--warning)"; } 
+            else { pD.innerHTML = `✅ Target Minggu Ini Tercapai! (${jM} Jam)`; pD.style.color = "#10b981"; }
+        } else { tD.innerText = "Belum diatur"; pD.innerHTML = ""; }
     }
 
-    // --- HOST MULTI PLATFORM ---
     window.updateHostPlatText = function() { const c = document.querySelectorAll('.host-plat-cb:checked'); const tE = document.getElementById('hostPlatSelectedText'); if(c.length === 0) tE.innerText = "Pilih Platform..."; else if(c.length === 1) tE.innerText = c[0].value; else tE.innerText = Array.from(c).map(cb => cb.value).join(', '); }
-    
     function checkActiveSession() { const u = localStorage.getItem('activeUser'), sess = JSON.parse(localStorage.getItem('sess_' + u)); if(sess) { document.getElementById('startSection').classList.add('hidden'); document.getElementById('liveSection').classList.remove('hidden'); startTimer(sess.start); renderUploadZones(sess.plats); } else { document.getElementById('startSection').classList.remove('hidden'); document.getElementById('liveSection').classList.add('hidden'); } }
-    
     window.mulai = function() { const u = localStorage.getItem('activeUser'); const c = Array.from(document.querySelectorAll('.host-plat-cb:checked')).map(cb => cb.value); if(c.length === 0) return Swal.fire({icon:'warning',text:'Pilih minimal 1 Platform!'}); localStorage.setItem('sess_'+u, JSON.stringify({start: Date.now(), plats: c})); checkActiveSession(); }
-    
     function startTimer(sT) { clearInterval(timerInterval); timerInterval = setInterval(() => { const d = Date.now() - sT; const h = Math.floor(d/3600000).toString().padStart(2,'0'), m = Math.floor((d%3600000)/60000).toString().padStart(2,'0'), s = Math.floor((d%60000)/1000).toString().padStart(2,'0'); document.getElementById('timerDisplay').innerText = `${h}:${m}:${s}`; }, 1000); }
     
     function renderUploadZones(platsArray) {
@@ -457,10 +442,9 @@
 
     window.prosesOCR = function(input, plat) {
         const file = input.files[0]; if(!file) return;
-        if(file.size > 2 * 1024 * 1024) console.warn("Gambar > 2MB");
-
-        const reader = new FileReader(); reader.onload = function(e) { window.sessionImages[plat] = e.target.result; document.getElementById(`preview_${plat}`).src = e.target.result; document.getElementById(`preview_${plat}`).style.display = 'block'; document.getElementById(`pzt_${plat}`).style.display = 'none'; document.getElementById(`pz_${plat}`).style.borderStyle = 'solid'; document.getElementById(`pz_${plat}`).style.borderColor = 'var(--success)'; }
-        reader.readAsDataURL(file);
+        window.compressImage(file, function(compressedB64) {
+            window.sessionImages[plat] = compressedB64; document.getElementById(`preview_${plat}`).src = compressedB64; document.getElementById(`preview_${plat}`).style.display = 'block'; document.getElementById(`pzt_${plat}`).style.display = 'none'; document.getElementById(`pz_${plat}`).style.borderStyle = 'solid'; document.getElementById(`pz_${plat}`).style.borderColor = 'var(--success)';
+        });
         const statusEl = document.getElementById(`status_${plat}`), inputGmv = document.getElementById(`gmv_${plat}`);
         statusEl.innerHTML = '⏳ Scanning GMV...'; statusEl.style.color = 'var(--warning)';
         Tesseract.recognize(file, 'ind+eng', { logger: m => { if(m.status === 'recognizing text') statusEl.innerHTML = `⏳ ${Math.round(m.progress * 100)}%`; } }).then(({ data: { text } }) => {
@@ -471,7 +455,7 @@
     }
 
     window.selesai = function() {
-        if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem masih memuat data server, pastikan koneksi stabil.', 'warning');
+        if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem masih memuat data server.', 'warning');
         const u = localStorage.getItem('activeUser'), sess = JSON.parse(localStorage.getItem('sess_'+u));
         const missing = sess.plats.filter(p => !window.sessionImages[p]);
         if(missing.length > 0) return Swal.fire({icon:'warning', title: 'Belum Lengkap!', text: `Harap upload SS untuk: ${missing.join(', ')}`});
@@ -482,10 +466,13 @@
         
         data.push({ id: Date.now() + Math.random(), host: u, plat: sess.plats.join(', '), timestamp: sess.start, tgl: new Date(sess.start).toLocaleDateString('en-CA'), mulai: new Date(sess.start).toLocaleTimeString('en-GB'), akhir: new Date(end).toLocaleTimeString('en-GB'), detik: detik, totalGmv: totalGmvAccumulated, platformsData: platformsData });
         
-        if(sync()) {
-            localStorage.removeItem('sess_'+u); clearInterval(timerInterval); window.sessionImages = {}; document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; 
-            Swal.fire({icon:'success',title:'Disimpan!'}); checkActiveSession(); renderHistory(); window.updateHostProgress();
-        }
+        Swal.fire({ title: 'Menyimpan Data...', text: 'Mengirim ke server, JANGAN tutup aplikasi!', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+        sync().then((ok) => {
+            if(ok) {
+                localStorage.removeItem('sess_'+u); clearInterval(timerInterval); window.sessionImages = {}; document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; 
+                Swal.fire({icon:'success',title:'Disimpan!'}); checkActiveSession(); renderHistory(); window.updateHostProgress();
+            }
+        });
     }
 
     window.lihatFoto = function(imgSrc) { Swal.fire({ imageUrl: imgSrc, imageAlt: 'Bukti SS', showConfirmButton: false, width: 'auto', padding: '1em', background: 'transparent', backdrop: 'rgba(0,0,0,0.85)' }); }
@@ -495,142 +482,78 @@
         const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*';
         input.onchange = e => {
             const file = e.target.files[0]; if(!file) return;
-            const reader = new FileReader();
-            reader.onload = ev => {
-                const base64Img = ev.target.result;
-                Swal.fire({ title: 'Memindai Gambar...', text: 'AI sedang membaca GMV baru.', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+            window.compressImage(file, function(compressedB64) {
+                Swal.fire({ title: 'Memindai Gambar...', text: 'AI membaca GMV baru.', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
                 Tesseract.recognize(file, 'ind+eng').then(({ data: { text } }) => {
                     const regex = /(?:Rp|IDR|\$)?\s*([0-9]{1,3}(?:\.[0-9]{3})*(?:\,[0-9]{1,2})?)/gi; let match; let highest = 0;
                     while ((match = regex.exec(text)) !== null) { let val = parseInt(match[1].replace(/\./g, '').replace(/\,/g, '')); if(!isNaN(val) && val > highest) highest = val; }
                     
-                    Swal.fire({ title: 'Konfirmasi GMV Baru', text: `Platform: ${platName}. Edit jika AI salah.`, input: 'number', inputValue: highest > 100 ? highest : '', imageUrl: base64Img, imageHeight: 200, showCancelButton: true, confirmButtonText: 'Simpan Perubahan' }).then(res => {
+                    Swal.fire({ title: 'Konfirmasi GMV Baru', text: `Platform: ${platName}`, input: 'number', inputValue: highest > 100 ? highest : '', imageUrl: compressedB64, imageHeight: 200, showCancelButton: true, confirmButtonText: 'Simpan Perubahan' }).then(res => {
                         if(res.isConfirmed) {
                             const newGmv = parseInt(res.value || 0); const session = data.find(d => String(d.id) === String(idStr));
                             if(session) {
                                 if(session.platformsData && session.platformsData.length > 0) {
                                     const pData = session.platformsData.find(p => p.plat === platName);
-                                    if(pData) { pData.img = base64Img; pData.gmv = newGmv; }
+                                    if(pData) { pData.img = compressedB64; pData.gmv = newGmv; }
                                     session.totalGmv = session.platformsData.reduce((s, p) => s + p.gmv, 0);
-                                } else { session.img = base64Img; session.gmv = newGmv; session.totalGmv = newGmv; }
+                                } else { session.img = compressedB64; session.gmv = newGmv; session.totalGmv = newGmv; }
                                 
-                                if(sync()) {
-                                    Swal.fire('Tersimpan', 'Foto dan GMV berhasil diupdate.', 'success');
-                                    if(!document.getElementById('hostPage').classList.contains('hidden')) renderHistory();
-                                    if(!document.getElementById('adminPage').classList.contains('hidden')) window.applyFilters();
-                                }
+                                Swal.fire({title:'Menyimpan...', didOpen:()=>Swal.showLoading()});
+                                sync().then((ok) => { if(ok) { Swal.fire('Tersimpan', 'Update Berhasil.', 'success'); if(!document.getElementById('hostPage').classList.contains('hidden')) renderHistory(); if(!document.getElementById('adminPage').classList.contains('hidden')) window.applyFilters(); } });
                             }
                         }
                     });
-                }).catch(err => { Swal.fire('Error', 'Gagal memindai gambar.', 'error'); });
-            }; reader.readAsDataURL(file);
+                }).catch(() => Swal.fire('Error', 'Gagal memindai gambar.', 'error'));
+            });
         }; input.click();
     }
 
-    // --- MODIFIKASI V25: EDIT GMV MANUAL ADMIN ---
     window.editGmvAdmin = function(idStr, platName) {
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
-        const session = data.find(d => String(d.id) === String(idStr));
-        if(!session) return;
-        
-        let currentGmv = 0;
-        if(session.platformsData) {
-            const pData = session.platformsData.find(p => p.plat === platName);
-            currentGmv = pData ? pData.gmv : 0;
-        } else {
-            currentGmv = session.totalGmv || session.gmv || 0;
-        }
+        const session = data.find(d => String(d.id) === String(idStr)); if(!session) return;
+        let currentGmv = session.platformsData ? (session.platformsData.find(p => p.plat === platName)?.gmv || 0) : (session.totalGmv || session.gmv || 0);
 
-        Swal.fire({
-            title: `Koreksi GMV (${platName})`,
-            text: 'Masukkan nominal baru (Rupiah):',
-            input: 'number',
-            inputValue: currentGmv,
-            showCancelButton: true,
-            confirmButtonText: 'Simpan Nominal',
-            inputValidator: (value) => { if (!value) return 'Nominal tidak boleh kosong!' }
-        }).then((result) => {
-            if (result.isConfirmed) {
-                const newGmv = parseInt(result.value);
+        Swal.fire({ title: `Koreksi GMV (${platName})`, input: 'number', inputValue: currentGmv, showCancelButton: true, confirmButtonText: 'Simpan' }).then((res) => {
+            if (res.isConfirmed) {
+                const newGmv = parseInt(res.value || 0);
                 if(session.platformsData && session.platformsData.length > 0) {
                     const pData = session.platformsData.find(p => p.plat === platName);
                     if(pData) pData.gmv = newGmv;
                     session.totalGmv = session.platformsData.reduce((s, p) => s + p.gmv, 0);
-                } else {
-                    session.gmv = newGmv;
-                    session.totalGmv = newGmv;
-                }
-                if(sync()) {
-                    Swal.fire('Berhasil!', 'Nominal GMV telah diperbarui.', 'success');
-                    window.applyFilters();
-                    window.updateGrafik();
-                }
+                } else { session.gmv = newGmv; session.totalGmv = newGmv; }
+                Swal.fire({title:'Menyimpan...', didOpen:()=>Swal.showLoading()});
+                sync().then((ok) => { if(ok) { Swal.fire('Berhasil!', '', 'success'); window.applyFilters(); window.updateGrafik(); } });
             }
         });
     }
 
-    // --- MODIFIKASI V26: EDIT WAKTU MANUAL ADMIN ---
     window.editWaktuAdmin = function(idStr) {
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
-        const session = data.find(d => String(d.id) === String(idStr));
-        if(!session) return;
+        const session = data.find(d => String(d.id) === String(idStr)); if(!session) return;
 
         Swal.fire({
-            title: 'Edit Waktu Sesi',
-            html: `
-                <div style="text-align:left; margin-bottom:10px; margin-top:20px;">
-                    <label style="font-size:0.85rem; color:var(--text-dim); font-weight:bold;">Jam Mulai (HH:mm:ss)</label>
-                    <input id="swal-mulai" class="swal2-input" style="margin-top:5px; margin-bottom:15px; width:90%; font-family:monospace;" value="${session.mulai}">
-                    <label style="font-size:0.85rem; color:var(--text-dim); font-weight:bold;">Jam Selesai (HH:mm:ss)</label>
-                    <input id="swal-akhir" class="swal2-input" style="margin-top:5px; margin-bottom:0; width:90%; font-family:monospace;" value="${session.akhir}">
-                </div>
-                <small style="color:var(--warning); display:block; margin-top:10px;">Durasi (Jam/Menit) akan dihitung ulang secara otomatis.</small>
-            `,
-            showCancelButton: true,
-            confirmButtonText: 'Simpan Waktu',
-            preConfirm: () => {
-                const mMulai = document.getElementById('swal-mulai').value.trim();
-                const mAkhir = document.getElementById('swal-akhir').value.trim();
-                if(!mMulai || !mAkhir) {
-                    Swal.showValidationMessage('Waktu tidak boleh kosong!');
-                    return false;
-                }
-                return { mMulai, mAkhir };
-            }
-        }).then((result) => {
-            if (result.isConfirmed) {
-                const { mMulai, mAkhir } = result.value;
+            title: 'Edit Waktu',
+            html: `<div style="text-align:left; margin-top:15px;"><label style="font-size:0.85rem; font-weight:bold;">Jam Mulai (HH:mm:ss)</label><input id="swal-mulai" class="swal2-input" style="font-family:monospace; margin-bottom:15px;" value="${session.mulai}"><label style="font-size:0.85rem; font-weight:bold;">Jam Selesai (HH:mm:ss)</label><input id="swal-akhir" class="swal2-input" style="font-family:monospace;" value="${session.akhir}"></div><small style="color:var(--warning); display:block; margin-top:10px;">Durasi akan otomatis dihitung ulang.</small>`,
+            showCancelButton: true, confirmButtonText: 'Simpan',
+            preConfirm: () => { return { mMulai: document.getElementById('swal-mulai').value.trim(), mAkhir: document.getElementById('swal-akhir').value.trim() }; }
+        }).then((res) => {
+            if (res.isConfirmed) {
+                const fMulai = res.value.mMulai.length === 5 ? res.value.mMulai + ':00' : res.value.mMulai;
+                const fAkhir = res.value.mAkhir.length === 5 ? res.value.mAkhir + ':00' : res.value.mAkhir;
+                let startTs = new Date(`${session.tgl}T${fMulai}`).getTime(), endTs = new Date(`${session.tgl}T${fAkhir}`).getTime();
+                if(isNaN(startTs) || isNaN(endTs)) return Swal.fire('Format Salah', 'Gunakan format jam yang benar (contoh: 14:30:00)', 'error');
+                if(endTs < startTs) endTs += 24 * 60 * 60 * 1000;
+                session.mulai = fMulai; session.akhir = fAkhir; session.detik = Math.floor((endTs - startTs) / 1000); session.timestamp = startTs;
                 
-                // Pastikan format ada detiknya (menghindari NaN jika user cuma ketik HH:mm)
-                const fMulai = mMulai.length === 5 ? mMulai + ':00' : mMulai;
-                const fAkhir = mAkhir.length === 5 ? mAkhir + ':00' : mAkhir;
-
-                let startTs = new Date(`${session.tgl}T${fMulai}`).getTime();
-                let endTs = new Date(`${session.tgl}T${fAkhir}`).getTime();
-
-                if(isNaN(startTs) || isNaN(endTs)) {
-                    return Swal.fire('Format Salah', 'Gunakan format jam yang benar (contoh: 14:30:00)', 'error');
-                }
-
-                if(endTs < startTs) endTs += 24 * 60 * 60 * 1000; // Handling jika lewat tengah malam
-
-                session.mulai = fMulai;
-                session.akhir = fAkhir;
-                session.detik = Math.floor((endTs - startTs) / 1000);
-                session.timestamp = startTs; // Update sorting timestamp
-
-                if(sync()) {
-                    Swal.fire('Berhasil!', 'Waktu dan Durasi berhasil diperbarui.', 'success');
-                    window.applyFilters();
-                    window.updateGrafik();
-                    renderAnalisaTarget();
-                }
+                Swal.fire({title:'Menyimpan...', didOpen:()=>Swal.showLoading()});
+                sync().then((ok) => { if(ok) { Swal.fire('Berhasil!', '', 'success'); window.applyFilters(); window.updateGrafik(); renderAnalisaTarget(); } });
             }
         });
     }
 
     window.hapusRiwayat = function(id) { 
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
-        Swal.fire({title:'Hapus Data Riwayat?', icon:'warning',showCancelButton:true,confirmButtonColor:'#e11d48'}).then((r)=>{ if(r.isConfirmed){ data = data.filter(x => String(x.id) !== String(id)); if(sync()) { Swal.fire('Terhapus!','','success'); window.applyFilters(); renderAnalisaTarget(); window.updateGrafik(); } } }); 
+        Swal.fire({title:'Hapus Data Riwayat?', icon:'warning',showCancelButton:true,confirmButtonColor:'#e11d48'}).then((r)=>{ if(r.isConfirmed){ data = data.filter(x => String(x.id) !== String(id)); Swal.fire({title:'Menghapus...', didOpen:()=>Swal.showLoading()}); sync().then((ok) => { if(ok) { Swal.fire('Terhapus!','','success'); window.applyFilters(); renderAnalisaTarget(); window.updateGrafik(); } }); } }); 
     }
 
     function renderHistory() {
@@ -669,9 +592,9 @@
             b.innerHTML += `<tr><td style="font-weight:700;">${h.u}</td><td>${tT}</td><td><button onclick="setTargetJam('${h.u}')" class="btn-info" style="padding:6px 10px; width:auto; border-radius:6px; font-size:0.8rem; margin-right:5px;">🎯 Target</button><button onclick="berikanPasswordBaru('${h.u}')" class="btn-warning" style="padding:6px 10px; width:auto; border-radius:6px; font-size:0.8rem; margin-right:5px;">Sandi</button><button onclick="hapusUser('${h.u}')" class="btn-outline" style="padding:6px 10px; width:auto; color:var(--accent); border-radius:6px; font-size:0.8rem;">Hapus</button></td></tr>`;
         });
     }
-    window.setTargetJam = function(u) { const c = users.find(x=>x.u===u).targetMingguan||''; Swal.fire({title:`Target ${u}`,text:'Jam per Minggu:',input:'number',inputValue:c,showCancelButton:true}).then((r)=>{ if(r.isConfirmed&&r.value){ users.find(x=>x.u===u).targetMingguan=parseFloat(r.value); if(sync()) Swal.fire('Tersimpan!','','success'); } }); }
-    window.berikanPasswordBaru = function(u) { Swal.fire({title:`Sandi Baru ${u}`,input:'text',showCancelButton:true}).then((r)=>{ if(r.isConfirmed&&r.value){ users.find(x=>x.u===u).p=r.value; resetRequests=resetRequests.filter(req=>req!==u); if(sync()) Swal.fire('Berhasil!','','success'); } }); }
-    window.hapusUser = function(u) { Swal.fire({title:`Hapus Akun ${u}?`,icon:'warning',showCancelButton:true,confirmButtonColor:'#e11d48'}).then((r)=>{ if(r.isConfirmed){ users=users.filter(x=>x.u!==u); resetRequests=resetRequests.filter(r=>r!==u); if(sync()) Swal.fire('Terhapus!','','success'); } }); }
+    window.setTargetJam = function(u) { const c = users.find(x=>x.u===u).targetMingguan||''; Swal.fire({title:`Target ${u}`,text:'Jam per Minggu:',input:'number',inputValue:c,showCancelButton:true}).then((r)=>{ if(r.isConfirmed&&r.value){ users.find(x=>x.u===u).targetMingguan=parseFloat(r.value); Swal.fire({title:'Menyimpan...', didOpen:()=>Swal.showLoading()}); sync().then((ok) => { if(ok) Swal.fire('Tersimpan!','','success'); }); } }); }
+    window.berikanPasswordBaru = function(u) { Swal.fire({title:`Sandi Baru ${u}`,input:'text',showCancelButton:true}).then((r)=>{ if(r.isConfirmed&&r.value){ users.find(x=>x.u===u).p=r.value; resetRequests=resetRequests.filter(req=>req!==u); Swal.fire({title:'Menyimpan...', didOpen:()=>Swal.showLoading()}); sync().then((ok) => { if(ok) Swal.fire('Berhasil!','','success'); }); } }); }
+    window.hapusUser = function(u) { Swal.fire({title:`Hapus Akun ${u}?`,icon:'warning',showCancelButton:true,confirmButtonColor:'#e11d48'}).then((r)=>{ if(r.isConfirmed){ users=users.filter(x=>x.u!==u); resetRequests=resetRequests.filter(req=>req!==u); Swal.fire({title:'Menghapus...', didOpen:()=>Swal.showLoading()}); sync().then((ok) => { if(ok) Swal.fire('Terhapus!','','success'); }); } }); }
 
     window.downloadTemplateExcel = async function() {
         const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('Data Upload');
@@ -694,7 +617,7 @@
                     if(!isNaN(sT)&&!isNaN(eT)) { data.push({ id:Date.now()+Math.random(), host:h, plat:p, timestamp:sT, tgl:t, mulai:m, akhir:a, detik:Math.floor((eT-sT)/1000), img:dI, totalGmv:g }); b++; }
                 }
             });
-            if(b>0){ if(sync()) { fI.value=''; Swal.fire('Sukses!',`${b} baris ditambahkan.`,'success'); } } else Swal.fire('Gagal','Tidak ada baris valid.','error');
+            if(b>0){ Swal.fire({title:'Menyimpan...', didOpen:()=>Swal.showLoading()}); sync().then((ok) => { if(ok) { fI.value=''; Swal.fire('Sukses!',`${b} baris ditambahkan.`,'success'); } }); } else Swal.fire('Gagal','Tidak ada baris valid.','error');
         }; r.readAsArrayBuffer(fI.files[0]);
     }
 
@@ -768,19 +691,7 @@
         if(window.flattenedFilteredData.length===0) return b.innerHTML = `<tr><td colspan="9">Data tidak ditemukan.</td></tr>`;
         window.flattenedFilteredData.forEach(x => {
             let imgDisplay = `<img src="${x.imgDisplay}" class="img-preview" onclick="lihatFoto('${x.imgDisplay}')">`;
-            
-            // TOMBOL AKSI ADMIN
-            b.innerHTML += `<tr>
-                <td style="font-weight:700;">${x.host}</td><td>${x.tgl}</td><td><span class="badge">${x.plat}</span></td>
-                <td style="font-variant-numeric:tabular-nums;">${x.mulai}</td><td style="font-variant-numeric:tabular-nums;">${x.akhir}</td>
-                <td style="color:#10b981; font-weight:700;">${formatRp(x.gmvDisplay)}</td><td>${formatDurasi(x.detik)}</td><td>${imgDisplay}</td>
-                <td style="display:flex; gap:4px; flex-wrap:wrap; width: 140px;">
-                    <button onclick="editGmvAdmin('${x.id}', '${x.plat}')" class="btn-info" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Nominal GMV">GMV</button>
-                    <button onclick="editWaktuAdmin('${x.id}')" class="btn-success" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Jam Mulai/Selesai">Jam</button>
-                    <button onclick="editFoto('${x.id}', '${x.plat}')" class="btn-warning" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Screenshot">SS</button>
-                    <button onclick="hapusRiwayat('${x.id}')" class="btn-outline" style="color:var(--accent); border-color:var(--accent); padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Hapus Permanen">Hapus</button>
-                </td>
-            </tr>`;
+            b.innerHTML += `<tr><td style="font-weight:700;">${x.host}</td><td>${x.tgl}</td><td><span class="badge">${x.plat}</span></td><td style="font-variant-numeric:tabular-nums;">${x.mulai}</td><td style="font-variant-numeric:tabular-nums;">${x.akhir}</td><td style="color:#10b981; font-weight:700;">${formatRp(x.gmvDisplay)}</td><td>${formatDurasi(x.detik)}</td><td>${imgDisplay}</td><td style="display:flex; gap:4px; flex-wrap:wrap; width: 140px;"><button onclick="editGmvAdmin('${x.id}', '${x.plat}')" class="btn-info" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Nominal GMV">GMV</button><button onclick="editWaktuAdmin('${x.id}')" class="btn-success" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Jam Mulai/Selesai">Jam</button><button onclick="editFoto('${x.id}', '${x.plat}')" class="btn-warning" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Screenshot">SS</button><button onclick="hapusRiwayat('${x.id}')" class="btn-outline" style="color:var(--accent); border-color:var(--accent); padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Hapus Permanen">Hapus</button></td></tr>`;
         });
     }
 
