@@ -334,7 +334,7 @@
     let data = []; let resetRequests = []; let filteredDataCache = []; let timerInterval;
     window.sessionImages = {};
     
-    // --- SAFETY LOCK (V24 FIX RACE CONDITION) ---
+    // --- SAFETY LOCK ---
     let isDataLoaded = false;
     let isUsersLoaded = false;
 
@@ -368,7 +368,7 @@
 
     const sync = () => { 
         if(!isDataLoaded || !isUsersLoaded) {
-            Swal.fire('⏳ Tunggu Sebentar', 'Sistem sedang menyinkronkan data dari server. Tolong tunggu beberapa detik.', 'warning');
+            Swal.fire('⏳ Tunggu Sebentar', 'Sistem sedang menyinkronkan data dari server.', 'warning');
             return false;
         }
         set(ref(db, 'users'), users); 
@@ -457,11 +457,7 @@
 
     window.prosesOCR = function(input, plat) {
         const file = input.files[0]; if(!file) return;
-        
-        // Batasi ukuran file (misal > 3MB kompres, tapi untuk HTML murni agak sulit, kita batasi saja agar tidak raksasa)
-        if(file.size > 2 * 1024 * 1024) { // 2MB Warning
-            console.warn("Gambar terlalu besar, akan memakan memori DB");
-        }
+        if(file.size > 2 * 1024 * 1024) console.warn("Gambar > 2MB");
 
         const reader = new FileReader(); reader.onload = function(e) { window.sessionImages[plat] = e.target.result; document.getElementById(`preview_${plat}`).src = e.target.result; document.getElementById(`preview_${plat}`).style.display = 'block'; document.getElementById(`pzt_${plat}`).style.display = 'none'; document.getElementById(`pz_${plat}`).style.borderStyle = 'solid'; document.getElementById(`pz_${plat}`).style.borderColor = 'var(--success)'; }
         reader.readAsDataURL(file);
@@ -476,7 +472,6 @@
 
     window.selesai = function() {
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem masih memuat data server, pastikan koneksi stabil.', 'warning');
-        
         const u = localStorage.getItem('activeUser'), sess = JSON.parse(localStorage.getItem('sess_'+u));
         const missing = sess.plats.filter(p => !window.sessionImages[p]);
         if(missing.length > 0) return Swal.fire({icon:'warning', title: 'Belum Lengkap!', text: `Harap upload SS untuk: ${missing.join(', ')}`});
@@ -520,6 +515,8 @@
                                 
                                 if(sync()) {
                                     Swal.fire('Tersimpan', 'Foto dan GMV berhasil diupdate.', 'success');
+                                    if(!document.getElementById('hostPage').classList.contains('hidden')) renderHistory();
+                                    if(!document.getElementById('adminPage').classList.contains('hidden')) window.applyFilters();
                                 }
                             }
                         }
@@ -529,16 +526,111 @@
         }; input.click();
     }
 
+    // --- MODIFIKASI V25: EDIT GMV MANUAL ADMIN ---
+    window.editGmvAdmin = function(idStr, platName) {
+        if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
+        const session = data.find(d => String(d.id) === String(idStr));
+        if(!session) return;
+        
+        let currentGmv = 0;
+        if(session.platformsData) {
+            const pData = session.platformsData.find(p => p.plat === platName);
+            currentGmv = pData ? pData.gmv : 0;
+        } else {
+            currentGmv = session.totalGmv || session.gmv || 0;
+        }
+
+        Swal.fire({
+            title: `Koreksi GMV (${platName})`,
+            text: 'Masukkan nominal baru (Rupiah):',
+            input: 'number',
+            inputValue: currentGmv,
+            showCancelButton: true,
+            confirmButtonText: 'Simpan Nominal',
+            inputValidator: (value) => { if (!value) return 'Nominal tidak boleh kosong!' }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                const newGmv = parseInt(result.value);
+                if(session.platformsData && session.platformsData.length > 0) {
+                    const pData = session.platformsData.find(p => p.plat === platName);
+                    if(pData) pData.gmv = newGmv;
+                    session.totalGmv = session.platformsData.reduce((s, p) => s + p.gmv, 0);
+                } else {
+                    session.gmv = newGmv;
+                    session.totalGmv = newGmv;
+                }
+                if(sync()) {
+                    Swal.fire('Berhasil!', 'Nominal GMV telah diperbarui.', 'success');
+                    window.applyFilters();
+                    window.updateGrafik();
+                }
+            }
+        });
+    }
+
+    // --- MODIFIKASI V26: EDIT WAKTU MANUAL ADMIN ---
+    window.editWaktuAdmin = function(idStr) {
+        if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
+        const session = data.find(d => String(d.id) === String(idStr));
+        if(!session) return;
+
+        Swal.fire({
+            title: 'Edit Waktu Sesi',
+            html: `
+                <div style="text-align:left; margin-bottom:10px; margin-top:20px;">
+                    <label style="font-size:0.85rem; color:var(--text-dim); font-weight:bold;">Jam Mulai (HH:mm:ss)</label>
+                    <input id="swal-mulai" class="swal2-input" style="margin-top:5px; margin-bottom:15px; width:90%; font-family:monospace;" value="${session.mulai}">
+                    <label style="font-size:0.85rem; color:var(--text-dim); font-weight:bold;">Jam Selesai (HH:mm:ss)</label>
+                    <input id="swal-akhir" class="swal2-input" style="margin-top:5px; margin-bottom:0; width:90%; font-family:monospace;" value="${session.akhir}">
+                </div>
+                <small style="color:var(--warning); display:block; margin-top:10px;">Durasi (Jam/Menit) akan dihitung ulang secara otomatis.</small>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Simpan Waktu',
+            preConfirm: () => {
+                const mMulai = document.getElementById('swal-mulai').value.trim();
+                const mAkhir = document.getElementById('swal-akhir').value.trim();
+                if(!mMulai || !mAkhir) {
+                    Swal.showValidationMessage('Waktu tidak boleh kosong!');
+                    return false;
+                }
+                return { mMulai, mAkhir };
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                const { mMulai, mAkhir } = result.value;
+                
+                // Pastikan format ada detiknya (menghindari NaN jika user cuma ketik HH:mm)
+                const fMulai = mMulai.length === 5 ? mMulai + ':00' : mMulai;
+                const fAkhir = mAkhir.length === 5 ? mAkhir + ':00' : mAkhir;
+
+                let startTs = new Date(`${session.tgl}T${fMulai}`).getTime();
+                let endTs = new Date(`${session.tgl}T${fAkhir}`).getTime();
+
+                if(isNaN(startTs) || isNaN(endTs)) {
+                    return Swal.fire('Format Salah', 'Gunakan format jam yang benar (contoh: 14:30:00)', 'error');
+                }
+
+                if(endTs < startTs) endTs += 24 * 60 * 60 * 1000; // Handling jika lewat tengah malam
+
+                session.mulai = fMulai;
+                session.akhir = fAkhir;
+                session.detik = Math.floor((endTs - startTs) / 1000);
+                session.timestamp = startTs; // Update sorting timestamp
+
+                if(sync()) {
+                    Swal.fire('Berhasil!', 'Waktu dan Durasi berhasil diperbarui.', 'success');
+                    window.applyFilters();
+                    window.updateGrafik();
+                    renderAnalisaTarget();
+                }
+            }
+        });
+    }
+
     window.hapusRiwayat = function(id) { 
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
-        Swal.fire({title:'Hapus Data Riwayat?', text: "Sesi ini akan dihapus permanen.", icon:'warning',showCancelButton:true,confirmButtonColor:'#e11d48'}).then((r)=>{ 
-            if(r.isConfirmed){ 
-                data = data.filter(x => String(x.id) !== String(id)); 
-                if(sync()) {
-                    Swal.fire('Terhapus!','Data berhasil dihapus.','success'); 
-                }
-            } 
-        }); 
+        Swal.fire({title:'Hapus Data Riwayat?', icon:'warning',showCancelButton:true,confirmButtonColor:'#e11d48'}).then((r)=>{ if(r.isConfirmed){ data = data.filter(x => String(x.id) !== String(id)); if(sync()) { Swal.fire('Terhapus!','','success'); window.applyFilters(); renderAnalisaTarget(); window.updateGrafik(); } } }); 
     }
 
     function renderHistory() {
@@ -548,17 +640,16 @@
             if(x.platformsData && x.platformsData.length > 0) {
                 x.platformsData.forEach(pd => {
                     let pB = `<span class="badge" style="margin-right:3px;">${pd.plat}</span>`;
-                    b.innerHTML += `<tr><td style="font-weight:600;">${x.tgl}</td><td style="color:var(--text-dim); font-variant-numeric:tabular-nums;">${x.mulai}-${x.akhir}</td><td>${pB}</td><td style="font-weight:700; color:#10b981;">${formatRp(pd.gmv)}</td><td style="font-weight:700; color:var(--primary);">${formatDurasi(x.detik)}</td><td><img src="${pd.img}" class="img-preview" onclick="lihatFoto('${pd.img}')"></td><td><button onclick="editFoto('${x.id}', '${pd.plat}')" class="btn-warning" style="padding:4px 8px; font-size:0.75rem; width:auto; border-radius:6px;">Edit SS</button></td></tr>`; 
+                    b.innerHTML += `<tr><td>${x.tgl}</td><td style="color:var(--text-dim); font-variant-numeric:tabular-nums;">${x.mulai}-${x.akhir}</td><td>${pB}</td><td style="font-weight:700; color:#10b981;">${formatRp(pd.gmv)}</td><td style="font-weight:700;">${formatDurasi(x.detik)}</td><td><img src="${pd.img}" class="img-preview" onclick="lihatFoto('${pd.img}')"></td><td><button onclick="editFoto('${x.id}', '${pd.plat}')" class="btn-warning" style="padding:4px 8px; font-size:0.75rem; width:auto; border-radius:6px;">Edit SS</button></td></tr>`; 
                 });
             } else {
                 let pB = x.plat.split(', ').map(p => `<span class="badge" style="margin-right:3px;">${p}</span>`).join('');
                 let gmvDisplay = x.totalGmv !== undefined ? x.totalGmv : (x.gmv || 0);
-                b.innerHTML += `<tr><td style="font-weight:600;">${x.tgl}</td><td style="color:var(--text-dim); font-variant-numeric:tabular-nums;">${x.mulai}-${x.akhir}</td><td>${pB}</td><td style="font-weight:700; color:#10b981;">${formatRp(gmvDisplay)}</td><td style="font-weight:700; color:var(--primary);">${formatDurasi(x.detik)}</td><td><img src="${x.img}" class="img-preview" onclick="lihatFoto('${x.img}')"></td><td><button onclick="editFoto('${x.id}', '${x.plat}')" class="btn-warning" style="padding:4px 8px; font-size:0.75rem; width:auto; border-radius:6px;">Edit SS</button></td></tr>`; 
+                b.innerHTML += `<tr><td>${x.tgl}</td><td style="color:var(--text-dim); font-variant-numeric:tabular-nums;">${x.mulai}-${x.akhir}</td><td>${pB}</td><td style="font-weight:700; color:#10b981;">${formatRp(gmvDisplay)}</td><td style="font-weight:700;">${formatDurasi(x.detik)}</td><td><img src="${x.img}" class="img-preview" onclick="lihatFoto('${x.img}')"></td><td><button onclick="editFoto('${x.id}', '${x.plat}')" class="btn-warning" style="padding:4px 8px; font-size:0.75rem; width:auto; border-radius:6px;">Edit SS</button></td></tr>`; 
             }
         });
     }
 
-    // --- ADMIN LOGIC ---
     function initAdmin() { renderResetRequests(); renderDaftarUser(); renderAnalisaTarget(); updateFilterCheckboxes(); window.applyFilters(); }
     function renderResetRequests() { const s = document.getElementById('adminResetSection'), b = document.getElementById('resetReqBody'); if(resetRequests.length===0) s.classList.add('hidden'); else { s.classList.remove('hidden'); b.innerHTML=''; resetRequests.forEach(u => b.innerHTML+=`<tr><td>${u}</td><td><button onclick="berikanPasswordBaru('${u}')" class="btn-primary" style="padding:6px 12px; width:auto; font-size:0.8rem;">Reset Sandi</button></td></tr>`); } }
     function renderAnalisaTarget() {
@@ -569,7 +660,7 @@
             const jM = (dM/3600).toFixed(1), jB = (dB/3600).toFixed(1), tM = h.targetMingguan||0, tB = tM*4;
             let sM = `<span class="badge badge-info">-</span>`, sB = `<span class="badge badge-info">-</span>`;
             if(tM>0){ sM=parseFloat(jM)>=tM?`<span class="badge badge-success">✅ Tercapai</span>`:`<span class="badge badge-danger">⚠️ ${tM-parseFloat(jM)} Jam</span>`; sB=parseFloat(jB)>=tB?`<span class="badge badge-success">✅ Tercapai</span>`:`<span class="badge badge-danger">⚠️ ${tB-parseFloat(jB)} Jam</span>`; }
-            b.innerHTML += `<tr><td style="font-weight:700; color:var(--primary);">${h.u}</td><td style="font-weight:600;">${tM>0?tM+' Jam':'-'}</td><td style="font-weight:700;">${jM} Jam</td><td style="text-align:center;">${sM}</td><td style="font-weight:600;">${tB>0?tB+' Jam':'-'}</td><td style="font-weight:700;">${jB} Jam</td><td style="text-align:center;">${sB}</td></tr>`;
+            b.innerHTML += `<tr><td style="font-weight:700; color:var(--primary);">${h.u}</td><td>${tM>0?tM+' Jam':'-'}</td><td>${jM} Jam</td><td style="text-align:center;">${sM}</td><td>${tB>0?tB+' Jam':'-'}</td><td>${jB} Jam</td><td style="text-align:center;">${sB}</td></tr>`;
         });
     }
     function renderDaftarUser() {
@@ -596,8 +687,8 @@
             const jD = XLSX.utils.sheet_to_json(XLSX.read(new Uint8Array(e.target.result), {type:'array'}).Sheets[XLSX.read(new Uint8Array(e.target.result), {type:'array'}).SheetNames[0]], {raw:false});
             if(jD.length===0) return Swal.fire('Error','Excel kosong.','error');
             let b = 0; const dI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=";
-            jD.forEach(r => {
-                const h = r['Username Host']||r['h'], t = r['Tanggal (YYYY-MM-DD)']||r['t'], p = r['Platform']||r['p'], m = r['Jam Mulai (HH:mm:ss)']||r['m'], a = r['Jam Selesai (HH:mm:ss)']||r['a'], g = parseInt(r['GMV Total (Rp)'] || r['g'] || 0);
+            jD.forEach(row => {
+                const h = row['Username Host']||row['h'], t = row['Tanggal (YYYY-MM-DD)']||row['t'], p = row['Platform']||row['p'], m = row['Jam Mulai (HH:mm:ss)']||row['m'], a = row['Jam Selesai (HH:mm:ss)']||row['a'], g = parseInt(row['GMV Total (Rp)'] || row['g'] || 0);
                 if(h&&t&&p&&m&&a) {
                     const sT = new Date(`${t}T${m}`).getTime(), eT = new Date(`${t}T${a}`).getTime();
                     if(!isNaN(sT)&&!isNaN(eT)) { data.push({ id:Date.now()+Math.random(), host:h, plat:p, timestamp:sT, tgl:t, mulai:m, akhir:a, detik:Math.floor((eT-sT)/1000), img:dI, totalGmv:g }); b++; }
@@ -608,76 +699,53 @@
     }
 
     window.myDailyChart = null; window.myTargetChart = null;
-    function updateGrafikDropdown() { const s = document.getElementById('grafikHostSelect'); s.innerHTML=''; const hs=users.filter(u=>u.r==='host'); if(hs.length===0) return s.innerHTML='<option>Belum ada Host</option>'; hs.forEach(h=>s.innerHTML+=`<option value="${h.u}">${h.u}</option>`); }
+    function updateGrafikDropdown() { const s = document.getElementById('grafikHostSelect'); if(!s) return; s.innerHTML=''; const hs=users.filter(u=>u.r==='host'); if(hs.length===0) return s.innerHTML='<option>Belum ada Host</option>'; hs.forEach(h=>s.innerHTML+=`<option value="${h.u}">${h.u}</option>`); }
     window.updateGrafik = function() {
         const hN = document.getElementById('grafikHostSelect').value; if(!hN||hN==='Belum ada Host') return;
         const sD = document.getElementById('grafikStartDate').value, eD = document.getElementById('grafikEndDate').value;
         const hU = users.find(u=>u.u===hN), tM = hU?(hU.targetMingguan||0):0, tB = tM*4, tH = tM>0?(tM/7).toFixed(1):0;
-        
         let hD = data.filter(d=>d.host===hN);
         if(sD) { const sTs = new Date(sD).setHours(0,0,0,0); hD = hD.filter(d => d.timestamp >= sTs); }
         if(eD) { const eTs = new Date(eD).setHours(23,59,59,999); hD = hD.filter(d => d.timestamp <= eTs); }
-
         let totalDetik = 0, totalGmv = 0, totalSesi = hD.length;
         const dailyMap = {}; 
-        hD.forEach(d=>{ 
-            totalDetik += d.detik; totalGmv += (d.totalGmv !== undefined ? d.totalGmv : (d.gmv || 0));
-            if(!dailyMap[d.tgl]) dailyMap[d.tgl]=0; dailyMap[d.tgl]+=d.detik; 
-        });
-
+        hD.forEach(d=>{ totalDetik += d.detik; totalGmv += (d.totalGmv !== undefined ? d.totalGmv : (d.gmv || 0)); if(!dailyMap[d.tgl]) dailyMap[d.tgl]=0; dailyMap[d.tgl]+=d.detik; });
         document.getElementById('statJam').innerText = (totalDetik / 3600).toFixed(1) + ' Jam';
         document.getElementById('statSesi').innerText = totalSesi + ' Sesi';
         document.getElementById('statGmv').innerText = formatRp(totalGmv);
         document.getElementById('statAvgGmv').innerText = totalSesi > 0 ? formatRp(totalGmv / totalSesi) : 'Rp 0';
-
         const gmvListBody = document.getElementById('gmvListBody'); gmvListBody.innerHTML = '';
-        if(hD.length === 0) {
-            gmvListBody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 20px;">Tidak ada sesi pada rentang tanggal ini.</td></tr>';
-        } else {
+        if(hD.length === 0) { gmvListBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Kosong.</td></tr>'; } 
+        else {
             hD.slice().reverse().forEach(d => {
-                if(d.platformsData && d.platformsData.length > 0) {
-                    d.platformsData.forEach(pd => { let pB = `<span class="badge" style="margin-right:3px;">${pd.plat}</span>`; gmvListBody.innerHTML += `<tr><td style="font-weight:600;">${d.tgl}</td><td style="color:var(--text-dim); font-variant-numeric:tabular-nums;">${d.mulai} - ${d.akhir}</td><td>${pB}</td><td style="font-weight:700; color:#10b981;">${formatRp(pd.gmv)}</td></tr>`; });
-                } else {
-                    let pB = d.plat.split(', ').map(p => `<span class="badge" style="margin-right:3px;">${p}</span>`).join(''); let g = d.totalGmv !== undefined ? d.totalGmv : (d.gmv || 0); gmvListBody.innerHTML += `<tr><td style="font-weight:600;">${d.tgl}</td><td style="color:var(--text-dim); font-variant-numeric:tabular-nums;">${d.mulai} - ${d.akhir}</td><td>${pB}</td><td style="font-weight:700; color:#10b981;">${formatRp(g)}</td></tr>`;
-                }
+                if(d.platformsData && d.platformsData.length > 0) { d.platformsData.forEach(pd => { let pB = `<span class="badge">${pd.plat}</span>`; gmvListBody.innerHTML += `<tr><td>${d.tgl}</td><td style="color:var(--text-dim);">${d.mulai}-${d.akhir}</td><td>${pB}</td><td style="font-weight:700; color:#10b981;">${formatRp(pd.gmv)}</td></tr>`; }); } 
+                else { let pB = d.plat.split(', ').map(p => `<span class="badge">${p}</span>`).join(''); let g = d.totalGmv !== undefined ? d.totalGmv : (d.gmv || 0); gmvListBody.innerHTML += `<tr><td>${d.tgl}</td><td style="color:var(--text-dim);">${d.mulai}-${d.akhir}</td><td>${pB}</td><td style="font-weight:700; color:#10b981;">${formatRp(g)}</td></tr>`; }
             });
         }
-
         const lD = Object.keys(dailyMap).sort(), vD = lD.map(t=>(dailyMap[t]/3600).toFixed(1)), tDL = lD.map(()=>tH);
         const wR = getWeekRange(), mR = getMonthRange();
         const dMI = data.filter(d => d.host===hN && d.timestamp>=wR.start && d.timestamp<=wR.end).reduce((s,c)=>s+c.detik,0);
         const dBI = data.filter(d => d.host===hN && d.timestamp>=mR.start && d.timestamp<=mR.end).reduce((s,c)=>s+c.detik,0);
-        const jM = (dMI/3600).toFixed(1), jB = (dBI/3600).toFixed(1);
-
         const iL = document.body.classList.contains('light-mode'); Chart.defaults.color = iL?'#4a5568':'#94a3b8'; Chart.defaults.font.family="'Plus Jakarta Sans', sans-serif";
-        const cO = { responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'top',labels:{usePointStyle:true,padding:15}}, tooltip:{backgroundColor:iL?'rgba(0,0,0,0.8)':'rgba(255,255,255,0.9)', titleColor:iL?'#fff':'#000', bodyColor:iL?'#fff':'#000', padding:10, cornerRadius:8, displayColors:false} }, scales:{ x:{display:false}, y:{display:false} } };
-
+        const cO = { responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'top',labels:{usePointStyle:true}}, tooltip:{backgroundColor:iL?'rgba(0,0,0,0.8)':'rgba(255,255,255,0.9)', padding:10, cornerRadius:8} }, scales:{ x:{display:false}, y:{display:false} } };
         if(window.myDailyChart) window.myDailyChart.destroy();
         const ctxD = document.getElementById('dailyLineChart').getContext('2d'); let g = ctxD.createLinearGradient(0,0,0,300); g.addColorStop(0,'rgba(90,103,216,0.5)'); g.addColorStop(1,'rgba(90,103,216,0.0)');
-        window.myDailyChart = new Chart(ctxD, { type:'line', data:{ labels:lD.length>0?lD:['-'], datasets:[ {label:'Pencapaian (Jam)',data:vD.length>0?vD:[0],borderColor:'#5a67d8',backgroundColor:g,fill:true,tension:0.4,borderWidth:3,pointBackgroundColor:'#5a67d8',pointRadius:4}, {label:'Target Harian',data:tDL,borderColor:'#f59e0b',borderDash:[6,6],fill:false,pointRadius:0,borderWidth:2} ]}, options:cO });
-        
+        window.myDailyChart = new Chart(ctxD, { type:'line', data:{ labels:lD.length>0?lD:['-'], datasets:[ {label:'Pencapaian',data:vD.length>0?vD:[0],borderColor:'#5a67d8',backgroundColor:g,fill:true,tension:0.4,pointRadius:4}, {label:'Target',data:tDL,borderColor:'#f59e0b',borderDash:[6,6],pointRadius:0} ]}, options:cO });
         if(window.myTargetChart) window.myTargetChart.destroy();
-        window.myTargetChart = new Chart(document.getElementById('targetBarChart').getContext('2d'), { type:'bar', data:{ labels:['Minggu Ini','Bulan Ini'], datasets:[ {label:'Tercapai (Jam)',data:[jM,jB],backgroundColor:'#5a67d8',borderRadius:8,barPercentage:0.5}, {label:'Target',data:[tM,tB],backgroundColor:'rgba(244,63,94,0.4)',borderRadius:8,barPercentage:0.5} ]}, options:cO });
+        window.myTargetChart = new Chart(document.getElementById('targetBarChart').getContext('2d'), { type:'bar', data:{ labels:['Minggu Ini','Bulan Ini'], datasets:[ {label:'Tercapai',data:[(dMI/3600).toFixed(1),(dBI/3600).toFixed(1)],backgroundColor:'#5a67d8',borderRadius:8}, {label:'Target',data:[tM,tB],backgroundColor:'rgba(244,63,94,0.4)',borderRadius:8} ]}, options:cO });
     }
 
     window.toggleDropdown = function(id) { document.querySelectorAll('.custom-options').forEach(el => { if(el.id !== id) el.classList.remove('open'); }); document.getElementById(id).classList.toggle('open'); }
     document.addEventListener('click', e => { if (!e.target.closest('.custom-select-wrapper')) document.querySelectorAll('.custom-options').forEach(el => el.classList.remove('open')); });
     window.updateHostText = function() { const c = document.querySelectorAll('.host-cb:checked'); document.getElementById('hostSelectedText').innerText = c.length===0?"Semua Host":(c.length===1?c[0].value:`${c.length} Host`); }
     window.updatePlatText = function() { const c = document.querySelectorAll('.plat-cb:checked'); document.getElementById('platSelectedText').innerText = c.length===0?"Semua Platform":(c.length===1?c[0].value:`${c.length} Plat`); }
-    function updateFilterCheckboxes() { const c = document.getElementById('filterHostList'); c.innerHTML=''; users.filter(u=>u.r==='host').forEach(h=>c.innerHTML+=`<label><input type="checkbox" class="host-cb" value="${h.u}" onchange="updateHostText()"> ${h.u}</label>`); }
-    
-    window.resetFilter = function() { 
-        document.querySelectorAll('.custom-options input[type="checkbox"]').forEach(cb=>cb.checked=false); 
-        window.updateHostText(); window.updatePlatText(); 
-        document.getElementById('filterStartDate').value=''; document.getElementById('filterEndDate').value=''; 
-        window.applyFilters(); 
-    }
+    function updateFilterCheckboxes() { const c = document.getElementById('filterHostList'); if(!c) return; c.innerHTML=''; users.filter(u=>u.r==='host').forEach(h=>c.innerHTML+=`<label><input type="checkbox" class="host-cb" value="${h.u}" onchange="updateHostText()"> ${h.u}</label>`); }
+    window.resetFilter = function() { document.querySelectorAll('.custom-options input[type="checkbox"]').forEach(cb=>cb.checked=false); window.updateHostText(); window.updatePlatText(); document.getElementById('filterStartDate').value=''; document.getElementById('filterEndDate').value=''; window.applyFilters(); }
 
     window.applyFilters = function() {
         const hCbs = Array.from(document.querySelectorAll('.host-cb:checked')).map(cb=>cb.value);
         const pCbs = Array.from(document.querySelectorAll('.plat-cb:checked')).map(cb=>cb.value);
         const sD = document.getElementById('filterStartDate').value, eD = document.getElementById('filterEndDate').value;
-        
         let baseData = data.filter(i => {
             const mH = hCbs.length === 0 || hCbs.includes(i.host);
             let mD = true;
@@ -685,70 +753,43 @@
             if(eD && i.timestamp > new Date(eD).setHours(23,59,59,999)) mD = false;
             return mH && mD;
         });
-
         window.flattenedFilteredData = [];
         baseData.forEach(x => {
             if(x.platformsData && x.platformsData.length > 0) {
-                x.platformsData.forEach(pd => {
-                    if(pCbs.length === 0 || pCbs.includes(pd.plat)) {
-                        window.flattenedFilteredData.push({ ...x, plat: pd.plat, gmvDisplay: pd.gmv, imgDisplay: pd.img });
-                    }
-                });
+                x.platformsData.forEach(pd => { if(pCbs.length === 0 || pCbs.includes(pd.plat)) window.flattenedFilteredData.push({ ...x, plat: pd.plat, gmvDisplay: pd.gmv, imgDisplay: pd.img }); });
             } else {
                 const platsArr = x.plat.split(',').map(s => s.trim());
                 const matchedPlats = pCbs.length === 0 ? platsArr : platsArr.filter(p => pCbs.includes(p));
-                matchedPlats.forEach(m => {
-                    window.flattenedFilteredData.push({ ...x, plat: m, gmvDisplay: x.totalGmv !== undefined ? x.totalGmv : (x.gmv || 0), imgDisplay: x.img });
-                });
+                matchedPlats.forEach(m => window.flattenedFilteredData.push({ ...x, plat: m, gmvDisplay: x.totalGmv || x.gmv || 0, imgDisplay: x.img }));
             }
         });
-
         window.flattenedFilteredData.sort((a,b) => b.timestamp - a.timestamp);
-
         const b = document.getElementById('adminAbsensiBody'); b.innerHTML = '';
-        if(window.flattenedFilteredData.length===0) return b.innerHTML = `<tr><td colspan="9" style="text-align:center;">Data tidak ditemukan.</td></tr>`;
-        
+        if(window.flattenedFilteredData.length===0) return b.innerHTML = `<tr><td colspan="9">Data tidak ditemukan.</td></tr>`;
         window.flattenedFilteredData.forEach(x => {
-            let pB = `<span class="badge">${x.plat}</span>`;
             let imgDisplay = `<img src="${x.imgDisplay}" class="img-preview" onclick="lihatFoto('${x.imgDisplay}')">`;
-
-            b.innerHTML += `<tr><td style="font-weight:700;">${x.host}</td><td>${x.tgl}</td><td>${pB}</td><td style="font-variant-numeric:tabular-nums;">${x.mulai}</td><td style="font-variant-numeric:tabular-nums;">${x.akhir}</td><td style="color:#10b981; font-weight:700;">${formatRp(x.gmvDisplay)}</td><td>${formatDurasi(x.detik)}</td><td>${imgDisplay}</td><td style="display:flex; gap:5px;"><button onclick="editFoto('${x.id}', '${x.plat}')" class="btn-warning" style="padding:4px 8px; font-size:0.75rem; width:auto; border-radius:6px;">Edit</button><button onclick="hapusRiwayat('${x.id}')" class="btn-outline" style="color:var(--accent); border-color:var(--accent); padding:4px 8px; font-size:0.75rem; width:auto; border-radius:6px;">Hapus</button></td></tr>`;
+            
+            // TOMBOL AKSI ADMIN
+            b.innerHTML += `<tr>
+                <td style="font-weight:700;">${x.host}</td><td>${x.tgl}</td><td><span class="badge">${x.plat}</span></td>
+                <td style="font-variant-numeric:tabular-nums;">${x.mulai}</td><td style="font-variant-numeric:tabular-nums;">${x.akhir}</td>
+                <td style="color:#10b981; font-weight:700;">${formatRp(x.gmvDisplay)}</td><td>${formatDurasi(x.detik)}</td><td>${imgDisplay}</td>
+                <td style="display:flex; gap:4px; flex-wrap:wrap; width: 140px;">
+                    <button onclick="editGmvAdmin('${x.id}', '${x.plat}')" class="btn-info" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Nominal GMV">GMV</button>
+                    <button onclick="editWaktuAdmin('${x.id}')" class="btn-success" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Jam Mulai/Selesai">Jam</button>
+                    <button onclick="editFoto('${x.id}', '${x.plat}')" class="btn-warning" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Screenshot">SS</button>
+                    <button onclick="hapusRiwayat('${x.id}')" class="btn-outline" style="color:var(--accent); border-color:var(--accent); padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Hapus Permanen">Hapus</button>
+                </td>
+            </tr>`;
         });
     }
 
     window.exportExcelFull = async function() {
-        if(window.flattenedFilteredData.length===0) return Swal.fire('Kosong','Tidak ada data didownload.','info');
+        if(window.flattenedFilteredData.length===0) return Swal.fire('Kosong','Tidak ada data.','info');
         const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('Rekap Detail');
-        ws.columns = [{header:'Host',key:'host',width:20},{header:'Tanggal',key:'tgl',width:15},{header:'Platform',key:'plat',width:20},{header:'Jam Mulai',key:'mulai',width:15},{header:'Jam Selesai',key:'akhir',width:15},{header:'GMV (Rp)',key:'gmv',width:20},{header:'Durasi',key:'durasi',width:18},{header:'Bukti',key:'bukti',width:20}];
-        const hR = ws.getRow(1); hR.font={bold:true,color:{argb:'FFFFFFFF'}}; hR.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF5A67D8'}}; hR.alignment={vertical:'middle',horizontal:'center'};
-        
-        window.flattenedFilteredData.forEach((x, i) => {
-            const rIdx = i+2; 
-            ws.addRow({host:x.host,tgl:x.tgl,plat:x.plat,mulai:x.mulai,akhir:x.akhir,gmv:x.gmvDisplay||0,durasi:formatDurasi(x.detik)}); 
-            ws.getRow(rIdx).height=55; ws.getRow(rIdx).alignment={vertical:'middle',horizontal:'left'}; ws.getCell(`F${rIdx}`).numFmt = '"Rp "* #,##0'; 
-            
-            if(x.imgDisplay && x.imgDisplay.length>100) { 
-                try { const imgId = wb.addImage({base64:x.imgDisplay.split(',')[1],extension:'png'}); ws.addImage(imgId, {tl:{col:7,row:rIdx-1},ext:{width:50,height:50}}); }catch(e){} 
-            } else ws.getCell(`H${rIdx}`).value = "Manual";
-        });
-        ws.eachRow(row=>row.eachCell(cell=>cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}}));
-        
-        const wsT = wb.addWorksheet('Total Waktu'); wsT.columns = [{header:'Nama Host',key:'host',width:20},{header:'Sesi',key:'sesi',width:15},{header:'Total GMV (Sesuai Filter)',key:'gmv',width:30},{header:'Total Waktu',key:'waktu',width:20}];
-        wsT.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}}; wsT.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF10B981'}};
-        
-        const total = {}; const seenIds = new Set();
-        window.flattenedFilteredData.forEach(x => { 
-            if(!total[x.host]) total[x.host]={d:0, g:0, sesiCount:0}; 
-            total[x.host].g += (x.gmvDisplay || 0); 
-            if(!seenIds.has(x.id)) { seenIds.add(x.id); total[x.host].d += x.detik; total[x.host].sesiCount += 1; }
-        });
-
-        Object.keys(total).forEach(h => {
-            const nr = wsT.addRow({host:h,sesi:total[h].sesiCount+' Sesi',gmv:total[h].g,waktu:formatDurasi(total[h].d)});
-            nr.getCell(3).numFmt = '"Rp "* #,##0';
-        });
-        wsT.eachRow(row=>row.eachCell(cell=>cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}}));
-        
+        ws.columns = [{header:'Host',key:'host',width:20},{header:'Tanggal',key:'tgl',width:15},{header:'Platform',key:'plat',width:15},{header:'Jam Mulai',key:'mulai',width:15},{header:'Jam Selesai',key:'akhir',width:15},{header:'GMV (Rp)',key:'gmv',width:20},{header:'Durasi',key:'durasi',width:18}];
+        const hR = ws.getRow(1); hR.font={bold:true,color:{argb:'FFFFFFFF'}}; hR.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF5A67D8'}};
+        window.flattenedFilteredData.forEach((x, i) => { const rIdx = i+2; ws.addRow({host:x.host,tgl:x.tgl,plat:x.plat,mulai:x.mulai,akhir:x.akhir,gmv:x.gmvDisplay||0,durasi:formatDurasi(x.detik)}); ws.getCell(`F${rIdx}`).numFmt = '"Rp "* #,##0'; });
         const buf = await wb.xlsx.writeBuffer(); saveAs(new Blob([buf]), `Rekap_Live_Host_${new Date().toLocaleDateString('id-ID')}.xlsx`);
     }
 
