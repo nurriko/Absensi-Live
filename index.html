@@ -82,7 +82,6 @@
 
         .link-text { color: var(--primary); text-decoration: none; cursor: pointer; font-size: 0.85rem; text-align: center; display: block; margin-top: 15px; font-weight: 600;}
         
-        /* === MATA PASSWORD === */
         .password-container { position: relative; display: block; }
         .password-container input { padding-right: 40px; }
         .password-toggle { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: auto; background: transparent; border: none; padding: 0; color: var(--text-dim); font-size: 1.2rem; cursor: pointer; box-shadow: none !important; margin: 0;}
@@ -279,7 +278,13 @@
                 <div><label>Filter Host:</label><div class="custom-select-wrapper"><div class="custom-select-trigger" onclick="toggleDropdown('hostDropdown')"><span id="hostSelectedText">Semua Host</span> <span>▼</span></div><div class="custom-options" id="hostDropdown"><div class="checkbox-list" id="filterHostList"></div></div></div></div>
                 <div><label>Filter Platform:</label><div class="custom-select-wrapper"><div class="custom-select-trigger" onclick="toggleDropdown('platDropdown')"><span id="platSelectedText">Semua Platform</span> <span>▼</span></div><div class="custom-options" id="platDropdown"><div class="checkbox-list"><label><input type="checkbox" class="plat-cb" value="TikTok" onchange="updatePlatText()"> TikTok</label><label><input type="checkbox" class="plat-cb" value="Shopee" onchange="updatePlatText()"> Shopee</label><label><input type="checkbox" class="plat-cb" value="Instagram" onchange="updatePlatText()"> Instagram</label></div></div></div></div>
                 <div><label>Tgl Mulai:</label><input type="date" id="filterStartDate"></div><div><label>Tgl Akhir:</label><input type="date" id="filterEndDate"></div>
-                <div style="grid-column: 1 / -1; display:flex; gap:10px; margin-top:5px;"><button class="btn-primary" onclick="applyFilters()" style="margin:0;">Cari Data</button><button class="btn-success" onclick="exportExcelFull()" style="margin:0;">📥 Download Excel</button><button class="btn-outline" onclick="resetFilter()" style="margin:0;">Reset Filter</button></div>
+                <div style="grid-column: 1 / -1; display:flex; gap:10px; margin-top:5px; flex-wrap: wrap;">
+                    <button class="btn-primary" onclick="applyFilters()" style="margin:0; width:auto;">Cari Data</button>
+                    <button class="btn-success" onclick="exportExcelFull()" style="margin:0; width:auto;">📥 Download Excel</button>
+                    <button class="btn-outline" onclick="resetFilter()" style="margin:0; width:auto;">Reset Filter</button>
+                    <div style="flex-grow: 1;"></div>
+                    <button class="btn-danger" onclick="hapusSemuaData()" style="margin:0; width:auto;">🗑️ Kosongkan Data</button>
+                </div>
             </div>
 
             <div class="table-container">
@@ -332,7 +337,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+    import { getDatabase, ref, onValue, set, update, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyBUplQfjuqQxpGkA9d2ULdpzcrSBG1YftI",
@@ -351,7 +356,6 @@
     let data = []; let resetRequests = []; let filteredDataCache = []; let timerInterval;
     window.sessionImages = {};
     
-    // --- SAFETY LOCK (MENCEGAH RACE CONDITION) ---
     let isDataLoaded = false; let isUsersLoaded = false;
 
     function showSyncStatus(show) { const s = document.getElementById('syncStatus'); if(show) { s.style.display = 'block'; } else { setTimeout(()=> s.style.display = 'none', 500); } }
@@ -390,26 +394,24 @@
         } catch(e) { console.error(e); Swal.fire('Error', 'Gagal menyimpan ke server.', 'error'); return false; }
     };
 
-    // --- KOMPRESI EKSTREM (ANTI-LAG) ---
     window.compressImage = function(file, callback) {
         const reader = new FileReader();
         reader.onload = function(e) {
             const img = new Image();
             img.onload = function() {
-                const canvas = document.createElement('canvas'); const MAX_DIM = 400; // Kompresi diperkecil jadi 400px
+                const canvas = document.createElement('canvas'); const MAX_DIM = 400; 
                 let width = img.width, height = img.height;
                 if (width > height && width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; }
                 else if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; }
                 canvas.width = width; canvas.height = height;
                 const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
-                callback(canvas.toDataURL('image/jpeg', 0.4)); // Kualitas dikurangi jadi 40%
+                callback(canvas.toDataURL('image/jpeg', 0.4)); 
             }
             img.src = e.target.result;
         }
         reader.readAsDataURL(file);
     }
 
-    // --- MATA PASSWORD ---
     window.togglePassword = function(inputId, btn) {
         const input = document.getElementById(inputId);
         if (input.type === 'password') { input.type = 'text'; btn.innerHTML = '🙈'; } 
@@ -417,7 +419,19 @@
     };
 
     function clearSemuaInput() { document.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]), select').forEach(el => el.value = ''); window.sessionImages = {}; }
-    function formatDurasi(d) { if (d < 60) return `${d} dtk`; const j = Math.floor(d/3600), m = Math.floor((d%3600)/60), s = d%60; let r = []; if(j>0) r.push(`${j} j`); if(m>0) r.push(`${m} m`); if(s>0) r.push(`${s} dtk`); return r.join(' '); }
+    
+    // PEMBARUAN PADA FUNGSI FORMAT DURASI
+    function formatDurasi(d) { 
+        if (isNaN(d) || d == null) return "0 dtk";
+        if (d < 60 && d >= 0) return `${d} dtk`; 
+        const j = Math.floor(d/3600), m = Math.floor((d%3600)/60), s = d%60; 
+        let r = []; 
+        if(j>0) r.push(`${j} j`); 
+        if(m>0) r.push(`${m} m`); 
+        if(s>0) r.push(`${s} dtk`); 
+        return r.join(' '); 
+    }
+
     function formatRp(angka) { return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka || 0); }
     function getWeekRange() { const n = new Date(), dW = n.getDay() === 0 ? 6 : n.getDay() - 1, s = new Date(n); s.setDate(n.getDate() - dW); s.setHours(0,0,0,0); const e = new Date(s); e.setDate(s.getDate() + 6); e.setHours(23,59,59,999); return { start: s.getTime(), end: e.getTime() }; }
     function getMonthRange() { const n = new Date(), s = new Date(n.getFullYear(), n.getMonth(), 1), e = new Date(n.getFullYear(), n.getMonth() + 1, 0, 23, 59, 59, 999); return { start: s.getTime(), end: e.getTime() }; }
@@ -428,7 +442,6 @@
     window.nav = function(id) { clearSemuaInput(); document.querySelectorAll('.container > .card, #adminPage').forEach(c => c.classList.add('hidden')); document.getElementById('mainContainer').classList.remove('hidden'); if(id === 'adminPage') document.getElementById('mainContainer').classList.add('hidden'); const target = document.getElementById(id); target.classList.remove('hidden'); anime({ targets: target, opacity: [0, 1], translateY: [20, 0], duration: 500, easing: 'easeOutQuart' }); }
     window.switchAdminTab = function(tN) { document.querySelectorAll('.sidebar-menu li').forEach(li => li.classList.remove('active')); document.getElementById(`menu-${tN}`).classList.add('active'); document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active')); document.getElementById(`tab-${tN}`).classList.add('active'); if(tN === 'grafik') { updateGrafikDropdown(); window.updateGrafik(); } }
 
-    // --- FITUR LOGIN CASE-INSENSITIVE ---
     window.register = function() { 
         const u = document.getElementById('regUsername').value.trim(), p = document.getElementById('regPassword').value.trim(); 
         if(!u || !p) return Swal.fire({icon:'warning',text:'Isi Nama dan Password!'}); 
@@ -502,9 +515,8 @@
         }).catch(err => { statusEl.innerHTML = '❌ Gagal. Ketik manual.'; statusEl.style.color = 'var(--accent)'; });
     }
 
-    // --- PENGIRIMAN SUPER RINGAN (SINGLE NODE SET) ---
     window.selesai = function() {
-        if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem masih memuat data server, pastikan koneksi stabil.', 'warning');
+        if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem masih memuat data server.', 'warning');
         const u = localStorage.getItem('activeUser'), sess = JSON.parse(localStorage.getItem('sess_'+u));
         const missing = sess.plats.filter(p => !window.sessionImages[p]);
         if(missing.length > 0) return Swal.fire({icon:'warning', title: 'Belum Lengkap!', text: `Harap upload SS untuk: ${missing.join(', ')}`});
@@ -517,7 +529,6 @@
         
         Swal.fire({ title: 'Menyimpan Data...', text: 'Mengirim ke server, JANGAN tutup aplikasi!', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
         
-        // Upload HANYA record baru ini ke Index Terakhir (Beban turun drastis)
         const newIndex = data.length;
         set(ref(db, `absensi_data/${newIndex}`), newRecord).then(() => {
             localStorage.removeItem('sess_'+u); clearInterval(timerInterval); window.sessionImages = {}; document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; 
@@ -613,7 +624,33 @@
         });
     }
 
-    // Hanya hapus yang merombak seluruh Array
+    window.hapusSemuaData = function() {
+        if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
+        if(data.length === 0) return Swal.fire('Kosong', 'Tidak ada data untuk dihapus.', 'info');
+        
+        Swal.fire({
+            title: 'HAPUS SEMUA DATA?',
+            text: "PASTIKAN ANDA SUDAH DOWNLOAD EXCEL! Data yang dihapus tidak bisa dikembalikan. Ketik 'HAPUS' (huruf besar) untuk konfirmasi:",
+            input: 'text',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#e11d48',
+            confirmButtonText: 'Ya, Hapus Semua!'
+        }).then((res) => {
+            if(res.isConfirmed) {
+                if(res.value === 'HAPUS') {
+                    Swal.fire({title:'Menghapus...', didOpen:()=>Swal.showLoading()});
+                    remove(ref(db, 'absensi_data')).then(() => {
+                        data = [];
+                        Swal.fire('Terhapus!', 'Semua data telah dibersihkan.', 'success');
+                    }).catch(err => Swal.fire('Error', 'Gagal menghapus data dari server.', 'error'));
+                } else {
+                    Swal.fire('Dibatalkan', 'Kata kunci salah. Data batal dihapus.', 'error');
+                }
+            }
+        });
+    }
+
     window.hapusRiwayat = function(id) { 
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
         Swal.fire({title:'Hapus Data Riwayat?', icon:'warning',showCancelButton:true,confirmButtonColor:'#e11d48'}).then((r)=>{ 
@@ -644,6 +681,7 @@
 
     function initAdmin() { renderResetRequests(); renderDaftarUser(); renderAnalisaTarget(); updateFilterCheckboxes(); window.applyFilters(); }
     function renderResetRequests() { const s = document.getElementById('adminResetSection'), b = document.getElementById('resetReqBody'); if(resetRequests.length===0) s.classList.add('hidden'); else { s.classList.remove('hidden'); b.innerHTML=''; resetRequests.forEach(u => b.innerHTML+=`<tr><td>${u}</td><td><button onclick="berikanPasswordBaru('${u}')" class="btn-primary" style="padding:6px 12px; width:auto; font-size:0.8rem;">Reset Sandi</button></td></tr>`); } }
+    
     function renderAnalisaTarget() {
         const b = document.getElementById('analisaTargetBody'); b.innerHTML=''; const hs = users.filter(u=>u.r==='host'); if(hs.length===0) return b.innerHTML='<tr><td colspan="7" style="text-align:center;">Belum ada Host.</td></tr>';
         const wR = getWeekRange(), mR = getMonthRange();
@@ -651,10 +689,14 @@
             const hD = data.filter(d => d.host === h.u), dM = hD.filter(d=>d.timestamp>=wR.start && d.timestamp<=wR.end).reduce((s, c)=>s+c.detik,0), dB = hD.filter(d=>d.timestamp>=mR.start && d.timestamp<=mR.end).reduce((s, c)=>s+c.detik,0);
             const jM = (dM/3600).toFixed(1), jB = (dB/3600).toFixed(1), tM = h.targetMingguan||0, tB = tM*4;
             let sM = `<span class="badge badge-info">-</span>`, sB = `<span class="badge badge-info">-</span>`;
-            if(tM>0){ sM=parseFloat(jM)>=tM?`<span class="badge badge-success">✅ Tercapai</span>`:`<span class="badge badge-danger">⚠️ ${tM-parseFloat(jM)} Jam</span>`; sB=parseFloat(jB)>=tB?`<span class="badge badge-success">✅ Tercapai</span>`:`<span class="badge badge-danger">⚠️ ${tB-parseFloat(jB)} Jam</span>`; }
+            if(tM>0){ 
+                sM = parseFloat(jM)>=tM ? `<span class="badge badge-success">✅ Tercapai</span>` : `<span class="badge badge-danger">⚠️ ${(tM-parseFloat(jM)).toFixed(1)} Jam</span>`; 
+                sB = parseFloat(jB)>=tB ? `<span class="badge badge-success">✅ Tercapai</span>` : `<span class="badge badge-danger">⚠️ ${(tB-parseFloat(jB)).toFixed(1)} Jam</span>`; 
+            }
             b.innerHTML += `<tr><td style="font-weight:700; color:var(--primary);">${h.u}</td><td>${tM>0?tM+' Jam':'-'}</td><td>${jM} Jam</td><td style="text-align:center;">${sM}</td><td>${tB>0?tB+' Jam':'-'}</td><td>${jB} Jam</td><td style="text-align:center;">${sB}</td></tr>`;
         });
     }
+
     function renderDaftarUser() {
         const b = document.getElementById('userListBody'); b.innerHTML=''; users.filter(u=>u.r==='host').forEach(h => {
             const tT = h.targetMingguan>0 ? `<span class="badge badge-success">${h.targetMingguan} Jam/Mgg</span>` : `<span class="badge badge-danger">Belum diset</span>`;
@@ -667,11 +709,13 @@
 
     window.downloadTemplateExcel = async function() {
         const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet('Data Upload');
-        ws.columns = [ {header:'Username Host',key:'h',width:25}, {header:'Tanggal (YYYY-MM-DD)',key:'t',width:25}, {header:'Platform',key:'p',width:20}, {header:'Jam Mulai (HH:mm:ss)',key:'m',width:25}, {header:'Jam Selesai (HH:mm:ss)',key:'a',width:25}, {header:'GMV Total (Rp)',key:'g',width:20} ];
+        ws.columns = [ {header:'Username Host',key:'h',width:25}, {header:'Tanggal (YYYY-MM-DD)',key:'t',width:25}, {header:'Platform',key:'p',width:20}, {header:'Jam Mulai (hh:mm:ss AM/PM)',key:'m',width:30}, {header:'Jam Selesai (hh:mm:ss AM/PM)',key:'a',width:30}, {header:'GMV Total (Rp)',key:'g',width:20} ];
         ws.getRow(1).font={bold:true, color:{argb:'FFFFFFFF'}}; ws.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF3B82F6'}};
-        ws.addRow({h:'Riko',t:'2026-04-01',p:'TikTok, Shopee',m:'10:00:00',a:'12:30:00',g:1500000});
+        ws.addRow({h:'Riko',t:'2026-04-01',p:'TikTok, Shopee',m:'10:00:00 AM',a:'12:30:00 PM',g:1500000});
         const buf = await wb.xlsx.writeBuffer(); saveAs(new Blob([buf]), `Template_Upload_Manual.xlsx`);
     }
+
+    // === PEROMBAKAN TOTAL LOGIKA BACA WAKTU UPLOAD MANUAL ===
     window.prosesUploadManual = function() {
         const fI = document.getElementById('manualUploadFile'); if(fI.files.length===0) return Swal.fire('Error','Pilih file Excel!','warning');
         const r = new FileReader();
@@ -679,16 +723,86 @@
             const jD = XLSX.utils.sheet_to_json(XLSX.read(new Uint8Array(e.target.result), {type:'array'}).Sheets[XLSX.read(new Uint8Array(e.target.result), {type:'array'}).SheetNames[0]], {raw:false});
             if(jD.length===0) return Swal.fire('Error','Excel kosong.','error');
             let b = 0; const dI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=";
+            
+            let updates = {};
+            let nextIdx = data.length;
+
+            // Fungsi kebal/pintar untuk baca segala format jam (bahkan desimal pecahan Excel)
+            function pTime(v) {
+                if(!v) return {h:0, m:0, s:0};
+                let s = String(v).trim().toUpperCase();
+                let isP = s.includes('PM'), isA = s.includes('AM');
+                s = s.replace(/AM|PM/g, '').trim();
+                
+                // Cek jika Excel mengkonversinya ke angka desimal waktu murni (contoh: 0.83333333)
+                if(!isNaN(s) && Number(s) > 0 && Number(s) < 1) {
+                    let sec = Math.round(Number(s) * 86400);
+                    return {h: Math.floor(sec/3600), m: Math.floor((sec%3600)/60), s: sec%60};
+                }
+                
+                let p = s.split(':');
+                let h = parseInt(p[0] || 0, 10), m = parseInt(p[1] || 0, 10), sec = parseInt(p[2] || 0, 10);
+                if (isP && h < 12) h += 12;
+                if (isA && h === 12) h = 0;
+                return {h, m, s:sec};
+            }
+
+            // Fungsi kebal untuk baca tanggal (MM/DD/YYYY atau YYYY-MM-DD atau Serial Excel)
+            function pDate(v) {
+                if(!v) return new Date();
+                if(!isNaN(v) && Number(v) > 20000) return new Date(Math.round((Number(v) - 25569) * 86400 * 1000));
+                let d = new Date(v); if(!isNaN(d.getTime())) return d;
+                let p = String(v).split(/[\/\-]/);
+                if(p.length === 3) {
+                    if(Number(p[0]) > 12) return new Date(`${p[2]}-${p[1]}-${p[0]}`); // DD/MM/YYYY fallback
+                }
+                return new Date();
+            }
+
             jD.forEach(row => {
-                const h = row['Username Host']||row['h'], t = row['Tanggal (YYYY-MM-DD)']||row['t'], p = row['Platform']||row['p'], m = row['Jam Mulai (HH:mm:ss)']||row['m'], a = row['Jam Selesai (HH:mm:ss)']||row['a'], g = parseInt(row['GMV Total (Rp)'] || row['g'] || 0);
-                if(h&&t&&p&&m&&a) {
-                    const sT = new Date(`${t}T${m}`).getTime(), eT = new Date(`${t}T${a}`).getTime();
-                    if(!isNaN(sT)&&!isNaN(eT)) { data.push({ id:Date.now()+Math.random(), host:h, plat:p, timestamp:sT, tgl:t, mulai:m, akhir:a, detik:Math.floor((eT-sT)/1000), img:dI, totalGmv:g }); b++; }
+                const h = row['Username Host']||row['h']||row['Host']||row['Username'];
+                const t = row['Tanggal (YYYY-MM-DD)']||row['t']||row['Tanggal'];
+                const p = row['Platform']||row['p'];
+                
+                // Bisa membaca header versi baru (ada AM/PM) maupun yang lama
+                const rawMulai = row['Jam Mulai (hh:mm:ss AM/PM)']||row['Jam Mulai']||row['m'];
+                const rawAkhir = row['Jam Selesai (hh:mm:ss AM/PM)']||row['Jam Selesai']||row['a'];
+                const g = parseInt(row['GMV Total (Rp)']||row['GMV Total']||row['g']||0);
+                
+                if(h && t && p && rawMulai && rawAkhir) {
+                    let sT = pTime(rawMulai);
+                    let eT = pTime(rawAkhir);
+                    
+                    // Kalkulasi detik sangat absolut, tidak terpengaruh error Date() browser
+                    let sSec = (sT.h * 3600) + (sT.m * 60) + sT.s;
+                    let eSec = (eT.h * 3600) + (eT.m * 60) + eT.s;
+                    
+                    let dtk = eSec - sSec;
+                    if(dtk < 0) dtk += 86400; // Logika otomatis jika Live melewati tengah malam
+                    
+                    let bD = pDate(t);
+                    let ts = new Date(bD).setHours(sT.h, sT.m, sT.s, 0);
+                    
+                    // Rapikan format agar selalu rapi HH:mm:ss di database dan tabel UI
+                    let fTgl = `${bD.getFullYear()}-${String(bD.getMonth()+1).padStart(2,'0')}-${String(bD.getDate()).padStart(2,'0')}`;
+                    let fM = `${String(sT.h).padStart(2,'0')}:${String(sT.m).padStart(2,'0')}:${String(sT.s).padStart(2,'0')}`;
+                    let fA = `${String(eT.h).padStart(2,'0')}:${String(eT.m).padStart(2,'0')}:${String(eT.s).padStart(2,'0')}`;
+                    
+                    if(!isNaN(ts)) { 
+                        updates[`absensi_data/${nextIdx}`] = { id:Date.now()+Math.random(), host:h, plat:p, timestamp:ts, tgl:fTgl, mulai:fM, akhir:fA, detik:dtk, img:dI, totalGmv:g }; 
+                        nextIdx++; b++; 
+                    }
                 }
             });
-            if(b>0){ Swal.fire({title:'Menyimpan...', didOpen:()=>Swal.showLoading()}); sync().then((ok) => { if(ok) { fI.value=''; Swal.fire('Sukses!',`${b} baris ditambahkan.`,'success'); } }); } else Swal.fire('Gagal','Tidak ada baris valid.','error');
+            if(b>0){ 
+                Swal.fire({title:'Menyimpan ke Server...', didOpen:()=>Swal.showLoading()}); 
+                update(ref(db), updates).then(() => {
+                    fI.value=''; Swal.fire('Sukses!',`${b} baris ditambahkan.`,'success'); 
+                }).catch(err => Swal.fire('Error','Gagal menyimpan data ke server.','error'));
+            } else Swal.fire('Gagal','Tidak ada baris valid. Pastikan header sesuai template.','error');
         }; r.readAsArrayBuffer(fI.files[0]);
     }
+    // ==============================================================
 
     window.myDailyChart = null; window.myTargetChart = null;
     function updateGrafikDropdown() { const s = document.getElementById('grafikHostSelect'); if(!s) return; s.innerHTML=''; const hs=users.filter(u=>u.r==='host'); if(hs.length===0) return s.innerHTML='<option>Belum ada Host</option>'; hs.forEach(h=>s.innerHTML+=`<option value="${h.u}">${h.u}</option>`); }
@@ -757,7 +871,7 @@
         });
         window.flattenedFilteredData.sort((a,b) => b.timestamp - a.timestamp);
         const b = document.getElementById('adminAbsensiBody'); b.innerHTML = '';
-        if(window.flattenedFilteredData.length===0) return b.innerHTML = `<tr><td colspan="9">Data tidak ditemukan.</td></tr>`;
+        if(window.flattenedFilteredData.length===0) return b.innerHTML = `<tr><td colspan="9" style="text-align:center;">Data tidak ditemukan.</td></tr>`;
         window.flattenedFilteredData.forEach(x => {
             let imgDisplay = `<img src="${x.imgDisplay}" class="img-preview" onclick="lihatFoto('${x.imgDisplay}')">`;
             b.innerHTML += `<tr><td style="font-weight:700;">${x.host}</td><td>${x.tgl}</td><td><span class="badge">${x.plat}</span></td><td style="font-variant-numeric:tabular-nums;">${x.mulai}</td><td style="font-variant-numeric:tabular-nums;">${x.akhir}</td><td style="color:#10b981; font-weight:700;">${formatRp(x.gmvDisplay)}</td><td>${formatDurasi(x.detik)}</td><td>${imgDisplay}</td><td style="display:flex; gap:4px; flex-wrap:wrap; width: 140px;"><button onclick="editGmvAdmin('${x.id}', '${x.plat}')" class="btn-info" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Nominal GMV">GMV</button><button onclick="editWaktuAdmin('${x.id}')" class="btn-success" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Jam Mulai/Selesai">Jam</button><button onclick="editFoto('${x.id}', '${x.plat}')" class="btn-warning" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Screenshot">SS</button><button onclick="hapusRiwayat('${x.id}')" class="btn-outline" style="color:var(--accent); border-color:var(--accent); padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Hapus Permanen">Hapus</button></td></tr>`;
@@ -765,11 +879,68 @@
     }
 
     window.exportExcelFull = async function() {
-        if(window.flattenedFilteredData.length===0) return Swal.fire('Kosong','Tidak ada data.','info');
+        if(window.flattenedFilteredData.length===0) return Swal.fire('Kosong','Tidak ada data didownload.','info');
         const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('Rekap Detail');
-        ws.columns = [{header:'Host',key:'host',width:20},{header:'Tanggal',key:'tgl',width:15},{header:'Platform',key:'plat',width:15},{header:'Jam Mulai',key:'mulai',width:15},{header:'Jam Selesai',key:'akhir',width:15},{header:'GMV (Rp)',key:'gmv',width:20},{header:'Durasi',key:'durasi',width:18}];
-        const hR = ws.getRow(1); hR.font={bold:true,color:{argb:'FFFFFFFF'}}; hR.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF5A67D8'}};
-        window.flattenedFilteredData.forEach((x, i) => { const rIdx = i+2; ws.addRow({host:x.host,tgl:x.tgl,plat:x.plat,mulai:x.mulai,akhir:x.akhir,gmv:x.gmvDisplay||0,durasi:formatDurasi(x.detik)}); ws.getCell(`F${rIdx}`).numFmt = '"Rp "* #,##0'; });
+        ws.columns = [{header:'Host',key:'host',width:20},{header:'Tanggal',key:'tgl',width:15},{header:'Platform',key:'plat',width:20},{header:'Jam Mulai',key:'mulai',width:15},{header:'Jam Selesai',key:'akhir',width:15},{header:'GMV (Rp)',key:'gmv',width:20},{header:'Durasi',key:'durasi',width:18},{header:'Bukti',key:'bukti',width:20}];
+        const hR = ws.getRow(1); hR.font={bold:true,color:{argb:'FFFFFFFF'}}; hR.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF5A67D8'}}; hR.alignment={vertical:'middle',horizontal:'center'};
+        
+        window.flattenedFilteredData.forEach((x, i) => {
+            const rIdx = i+2; 
+            ws.addRow({host:x.host,tgl:x.tgl,plat:x.plat,mulai:x.mulai,akhir:x.akhir,gmv:x.gmvDisplay||0,durasi:formatDurasi(x.detik)}); 
+            ws.getRow(rIdx).height=55; ws.getRow(rIdx).alignment={vertical:'middle',horizontal:'left'}; ws.getCell(`F${rIdx}`).numFmt = '"Rp "* #,##0'; 
+            
+            if(x.imgDisplay && x.imgDisplay.length>100) { 
+                try { const imgId = wb.addImage({base64:x.imgDisplay.split(',')[1],extension:'png'}); ws.addImage(imgId, {tl:{col:7,row:rIdx-1},ext:{width:50,height:50}}); }catch(e){} 
+            } else ws.getCell(`H${rIdx}`).value = "Manual";
+        });
+        ws.eachRow(row=>row.eachCell(cell=>cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}}));
+        
+        const wsT = wb.addWorksheet('Total Waktu'); wsT.columns = [{header:'Nama Host',key:'host',width:20},{header:'Sesi',key:'sesi',width:15},{header:'Total GMV (Sesuai Filter)',key:'gmv',width:30},{header:'Total Waktu',key:'waktu',width:20}];
+        wsT.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}}; wsT.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF10B981'}};
+        
+        const total = {}; const seenIds = new Set();
+        window.flattenedFilteredData.forEach(x => { 
+            if(!total[x.host]) total[x.host]={d:0, g:0, sesiCount:0}; 
+            total[x.host].g += (x.gmvDisplay || 0); 
+            if(!seenIds.has(x.id)) { seenIds.add(x.id); total[x.host].d += x.detik; total[x.host].sesiCount += 1; }
+        });
+
+        Object.keys(total).forEach(h => {
+            const nr = wsT.addRow({host:h,sesi:total[h].sesiCount+' Sesi',gmv:total[h].g,waktu:formatDurasi(total[h].d)});
+            nr.getCell(3).numFmt = '"Rp "* #,##0';
+        });
+        wsT.eachRow(row=>row.eachCell(cell=>cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}}));
+
+        const wsP = wb.addWorksheet('Pivot Total Jam');
+        wsP.columns = [
+            {header:'Row Labels (Host)', key:'host', width:25},
+            {header:'Count of Sesi', key:'sesi', width:15},
+            {header:'Sum of Total GMV', key:'gmv', width:25},
+            {header:'Sum of Jam Live', key:'jam', width:20}
+        ];
+        const hRP = wsP.getRow(1);
+        hRP.font={bold:true, color:{argb:'FF000000'}};
+        hRP.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFD9D9D9'}};
+        
+        let grandSesi = 0, grandGmv = 0, grandDetik = 0;
+        Object.keys(total).forEach(h => {
+            const hJam = (total[h].d / 3600).toFixed(2);
+            const rowP = wsP.addRow({host: h, sesi: total[h].sesiCount, gmv: total[h].g, jam: parseFloat(hJam)});
+            rowP.getCell(3).numFmt = '"Rp "* #,##0';
+            rowP.getCell(4).numFmt = '0.00';
+            grandSesi += total[h].sesiCount;
+            grandGmv += total[h].g;
+            grandDetik += total[h].d;
+        });
+        
+        const grandJam = (grandDetik / 3600).toFixed(2);
+        const gtRow = wsP.addRow({host: 'Grand Total', sesi: grandSesi, gmv: grandGmv, jam: parseFloat(grandJam)});
+        gtRow.font = {bold:true};
+        gtRow.getCell(3).numFmt = '"Rp "* #,##0';
+        gtRow.getCell(4).numFmt = '0.00';
+        
+        wsP.eachRow(row=>row.eachCell(cell=>cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}}));
+
         const buf = await wb.xlsx.writeBuffer(); saveAs(new Blob([buf]), `Rekap_Live_Host_${new Date().toLocaleDateString('id-ID')}.xlsx`);
     }
 
