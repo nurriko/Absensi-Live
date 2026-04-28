@@ -340,6 +340,7 @@
 </div>
 
 <script type="module">
+    // HANYA MENGGUNAKAN REALTIME DATABASE (TANPA STORAGE)
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getDatabase, ref, onValue, set, update, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
@@ -399,18 +400,21 @@
         } catch(e) { console.error(e); Swal.fire('Error', 'Gagal menyimpan ke server.', 'error'); return false; }
     };
 
+    // ULTRA-COMPRESSION: Gambar diperkecil secara drastis agar Realtime Database tidak lemot
     window.compressImage = function(file, callback) {
         const reader = new FileReader();
         reader.onload = function(e) {
             const img = new Image();
             img.onload = function() {
-                const canvas = document.createElement('canvas'); const MAX_DIM = 400; 
+                const canvas = document.createElement('canvas'); 
+                const MAX_DIM = 250; // Mengecilkan resolusi maksimal ke 250px
                 let width = img.width, height = img.height;
                 if (width > height && width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; }
                 else if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; }
                 canvas.width = width; canvas.height = height;
                 const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
-                callback(canvas.toDataURL('image/jpeg', 0.4)); 
+                // Kualitas diturunkan ke 30% (Sangat ringan tapi masih terlihat angkanya)
+                callback(canvas.toDataURL('image/jpeg', 0.3)); 
             }
             img.src = e.target.result;
         }
@@ -526,7 +530,11 @@
         if(missing.length > 0) return Swal.fire({icon:'warning', title: 'Belum Lengkap!', text: `Harap upload SS untuk: ${missing.join(', ')}`});
         
         let platformsData = [], totalGmvAccumulated = 0;
-        sess.plats.forEach(p => { const gmvVal = parseInt(document.getElementById(`gmv_${p}`).value || 0); totalGmvAccumulated += gmvVal; platformsData.push({ plat: p, img: window.sessionImages[p], gmv: gmvVal }); });
+        sess.plats.forEach(p => { 
+            const gmvVal = parseInt(document.getElementById(`gmv_${p}`).value || 0); 
+            totalGmvAccumulated += gmvVal; 
+            platformsData.push({ plat: p, img: window.sessionImages[p], gmv: gmvVal }); 
+        });
         const end = Date.now(), detik = Math.floor((end - sess.start) / 1000);
         
         const newRecord = { id: Date.now() + Math.random(), host: u, plat: sess.plats.join(', '), timestamp: sess.start, tgl: new Date(sess.start).toLocaleDateString('en-CA'), mulai: new Date(sess.start).toLocaleTimeString('en-GB'), akhir: new Date(end).toLocaleTimeString('en-GB'), detik: detik, totalGmv: totalGmvAccumulated, platformsData: platformsData };
@@ -628,7 +636,6 @@
         });
     }
 
-    // === FITUR HAPUS TERPILIH & CHECKBOX ===
     window.toggleAllCheckboxes = function() {
         const master = document.getElementById('selectAllCheckbox').checked;
         document.querySelectorAll('.row-cb').forEach(cb => cb.checked = master);
@@ -906,90 +913,97 @@
         });
         window.flattenedFilteredData.sort((a,b) => b.timestamp - a.timestamp);
         const b = document.getElementById('adminAbsensiBody'); b.innerHTML = '';
-        if(window.flattenedFilteredData.length===0) return b.innerHTML = `<tr><td colspan="10" style="text-align:center;">Data tidak ditemukan.</td></tr>`;
+        if(window.flattenedFilteredData.length===0) return b.innerHTML = `<tr><td colspan=\"10\" style=\"text-align:center;\">Data tidak ditemukan.</td></tr>`;
         window.flattenedFilteredData.forEach(x => {
             let imgDisplay = `<img src="${x.imgDisplay}" class="img-preview" onclick="lihatFoto('${x.imgDisplay}')">`;
-            b.innerHTML += `<tr><td style="text-align:center;"><input type="checkbox" class="row-cb" value="${x.id}" style="width: 15px; height: 15px; cursor: pointer; margin: 0;"></td><td style="font-weight:700;">${x.host}</td><td>${x.tgl}</td><td><span class="badge">${x.plat}</span></td><td style="font-variant-numeric:tabular-nums;">${x.mulai}</td><td style="font-variant-numeric:tabular-nums;">${x.akhir}</td><td style="color:#10b981; font-weight:700;">${formatRp(x.gmvDisplay)}</td><td>${formatDurasi(x.detik)}</td><td>${imgDisplay}</td><td style="display:flex; gap:4px; flex-wrap:wrap; width: 140px;"><button onclick="editGmvAdmin('${x.id}', '${x.plat}')" class="btn-info" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Nominal GMV">GMV</button><button onclick="editWaktuAdmin('${x.id}')" class="btn-success" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Jam Mulai/Selesai">Jam</button><button onclick="editFoto('${x.id}', '${x.plat}')" class="btn-warning" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Screenshot">SS</button><button onclick="hapusRiwayat('${x.id}')" class="btn-outline" style="color:var(--accent); border-color:var(--accent); padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Hapus Permanen">Hapus</button></td></tr>`;
+            b.innerHTML += `<tr><td style=\"text-align:center;\"><input type=\"checkbox\" class=\"row-cb\" value=\"${x.id}\" style=\"width: 15px; height: 15px; cursor: pointer; margin: 0;\"></td><td style=\"font-weight:700;\">${x.host}</td><td>${x.tgl}</td><td><span class=\"badge\">${x.plat}</span></td><td style=\"font-variant-numeric:tabular-nums;\">${x.mulai}</td><td style=\"font-variant-numeric:tabular-nums;\">${x.akhir}</td><td style=\"color:#10b981; font-weight:700;\">${formatRp(x.gmvDisplay)}</td><td>${formatDurasi(x.detik)}</td><td>${imgDisplay}</td><td style=\"display:flex; gap:4px; flex-wrap:wrap; width: 140px;\"><button onclick=\"editGmvAdmin('${x.id}', '${x.plat}')\" class=\"btn-info\" style=\"padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;\" title=\"Edit Nominal GMV\">GMV</button><button onclick=\"editWaktuAdmin('${x.id}')\" class=\"btn-success\" style=\"padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;\" title=\"Edit Jam Mulai/Selesai\">Jam</button><button onclick=\"editFoto('${x.id}', '${x.plat}')\" class=\"btn-warning\" style=\"padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;\" title=\"Edit Screenshot\">SS</button><button onclick=\"hapusRiwayat('${x.id}')\" class=\"btn-outline\" style=\"color:var(--accent); border-color:var(--accent); padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;\" title=\"Hapus Permanen\">Hapus</button></td></tr>`;
         });
     }
 
-    // === MODIFIKASI DOWNLOAD EXCEL ===
+    // --- KEMBALIKAN KE SISTEM DOWNLOAD GAMBAR KE EXCEL LANGSUNG (BASE64) ---
     window.exportExcelFull = async function() {
         if(window.flattenedFilteredData.length===0) return Swal.fire('Kosong','Tidak ada data yang tersedia untuk didownload.','info');
         
-        // Ambil data yang dicentang (jika ada)
         const checkedBoxes = Array.from(document.querySelectorAll('.row-cb:checked')).map(cb => String(cb.value));
         let dataToExport = window.flattenedFilteredData;
         
-        // Jika ada checkbox yang dicentang, hanya eksport yang dicentang
         if (checkedBoxes.length > 0) {
             dataToExport = window.flattenedFilteredData.filter(x => checkedBoxes.includes(String(x.id)));
         }
 
         if(dataToExport.length === 0) return Swal.fire('Kosong', 'Tidak ada data terpilih untuk didownload.', 'info');
 
-        const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('Rekap Detail');
-        ws.columns = [{header:'Host',key:'host',width:20},{header:'Tanggal',key:'tgl',width:15},{header:'Platform',key:'plat',width:20},{header:'Jam Mulai',key:'mulai',width:15},{header:'Jam Selesai',key:'akhir',width:15},{header:'GMV (Rp)',key:'gmv',width:20},{header:'Durasi',key:'durasi',width:18},{header:'Bukti',key:'bukti',width:20}];
-        const hR = ws.getRow(1); hR.font={bold:true,color:{argb:'FFFFFFFF'}}; hR.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF5A67D8'}}; hR.alignment={vertical:'middle',horizontal:'center'};
-        
-        dataToExport.forEach((x, i) => {
-            const rIdx = i+2; 
-            ws.addRow({host:x.host,tgl:x.tgl,plat:x.plat,mulai:x.mulai,akhir:x.akhir,gmv:x.gmvDisplay||0,durasi:formatDurasi(x.detik)}); 
-            ws.getRow(rIdx).height=55; ws.getRow(rIdx).alignment={vertical:'middle',horizontal:'left'}; ws.getCell(`F${rIdx}`).numFmt = '"Rp "* #,##0'; 
+        Swal.fire({ title: 'Menyiapkan Excel...', text: 'Mohon tunggu', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+
+        try {
+            const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('Rekap Detail');
+            ws.columns = [{header:'Host',key:'host',width:20},{header:'Tanggal',key:'tgl',width:15},{header:'Platform',key:'plat',width:20},{header:'Jam Mulai',key:'mulai',width:15},{header:'Jam Selesai',key:'akhir',width:15},{header:'GMV (Rp)',key:'gmv',width:20},{header:'Durasi',key:'durasi',width:18},{header:'Bukti',key:'bukti',width:20}];
+            const hR = ws.getRow(1); hR.font={bold:true,color:{argb:'FFFFFFFF'}}; hR.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF5A67D8'}}; hR.alignment={vertical:'middle',horizontal:'center'};
             
-            if(x.imgDisplay && x.imgDisplay.length>100) { 
-                try { const imgId = wb.addImage({base64:x.imgDisplay.split(',')[1],extension:'png'}); ws.addImage(imgId, {tl:{col:7,row:rIdx-1},ext:{width:50,height:50}}); }catch(e){} 
-            } else ws.getCell(`H${rIdx}`).value = "Manual";
-        });
-        ws.eachRow(row=>row.eachCell(cell=>cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}}));
-        
-        const wsT = wb.addWorksheet('Total Waktu'); wsT.columns = [{header:'Nama Host',key:'host',width:20},{header:'Sesi',key:'sesi',width:15},{header:'Total GMV',key:'gmv',width:30},{header:'Total Waktu',key:'waktu',width:20}];
-        wsT.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}}; wsT.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF10B981'}};
-        
-        const total = {}; const seenIds = new Set();
-        dataToExport.forEach(x => { 
-            if(!total[x.host]) total[x.host]={d:0, g:0, sesiCount:0}; 
-            total[x.host].g += (x.gmvDisplay || 0); 
-            if(!seenIds.has(x.id)) { seenIds.add(x.id); total[x.host].d += x.detik; total[x.host].sesiCount += 1; }
-        });
+            dataToExport.forEach((x, i) => {
+                const rIdx = i+2; 
+                ws.addRow({host:x.host,tgl:x.tgl,plat:x.plat,mulai:x.mulai,akhir:x.akhir,gmv:x.gmvDisplay||0,durasi:formatDurasi(x.detik)}); 
+                ws.getRow(rIdx).height=55; ws.getRow(rIdx).alignment={vertical:'middle',horizontal:'left'}; ws.getCell(`F${rIdx}`).numFmt = '"Rp "* #,##0'; 
+                
+                if(x.imgDisplay && x.imgDisplay.length>100) { 
+                    try { const imgId = wb.addImage({base64:x.imgDisplay.split(',')[1],extension:'png'}); ws.addImage(imgId, {tl:{col:7,row:rIdx-1},ext:{width:50,height:50}}); }catch(e){} 
+                } else ws.getCell(`H${rIdx}`).value = "Manual";
+            });
+            ws.eachRow(row=>row.eachCell(cell=>cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}}));
+            
+            const wsT = wb.addWorksheet('Total Waktu'); wsT.columns = [{header:'Nama Host',key:'host',width:20},{header:'Sesi',key:'sesi',width:15},{header:'Total GMV',key:'gmv',width:30},{header:'Total Waktu',key:'waktu',width:20}];
+            wsT.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}}; wsT.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF10B981'}};
+            
+            const total = {}; const seenIds = new Set();
+            dataToExport.forEach(x => { 
+                if(!total[x.host]) total[x.host]={d:0, g:0, sesiCount:0}; 
+                total[x.host].g += (x.gmvDisplay || 0); 
+                if(!seenIds.has(x.id)) { seenIds.add(x.id); total[x.host].d += x.detik; total[x.host].sesiCount += 1; }
+            });
 
-        Object.keys(total).forEach(h => {
-            const nr = wsT.addRow({host:h,sesi:total[h].sesiCount+' Sesi',gmv:total[h].g,waktu:formatDurasi(total[h].d)});
-            nr.getCell(3).numFmt = '"Rp "* #,##0';
-        });
-        wsT.eachRow(row=>row.eachCell(cell=>cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}}));
+            Object.keys(total).forEach(h => {
+                const nr = wsT.addRow({host:h,sesi:total[h].sesiCount+' Sesi',gmv:total[h].g,waktu:formatDurasi(total[h].d)});
+                nr.getCell(3).numFmt = '"Rp "* #,##0';
+            });
+            wsT.eachRow(row=>row.eachCell(cell=>cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}}));
 
-        const wsP = wb.addWorksheet('Pivot Total Jam');
-        wsP.columns = [
-            {header:'Row Labels (Host)', key:'host', width:25},
-            {header:'Count of Sesi', key:'sesi', width:15},
-            {header:'Sum of Total GMV', key:'gmv', width:25},
-            {header:'Sum of Jam Live', key:'jam', width:20}
-        ];
-        const hRP = wsP.getRow(1);
-        hRP.font={bold:true, color:{argb:'FF000000'}};
-        hRP.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFD9D9D9'}};
-        
-        let grandSesi = 0, grandGmv = 0, grandDetik = 0;
-        Object.keys(total).forEach(h => {
-            const hJam = (total[h].d / 3600).toFixed(2);
-            const rowP = wsP.addRow({host: h, sesi: total[h].sesiCount, gmv: total[h].g, jam: parseFloat(hJam)});
-            rowP.getCell(3).numFmt = '"Rp "* #,##0';
-            rowP.getCell(4).numFmt = '0.00';
-            grandSesi += total[h].sesiCount;
-            grandGmv += total[h].g;
-            grandDetik += total[h].d;
-        });
-        
-        const grandJam = (grandDetik / 3600).toFixed(2);
-        const gtRow = wsP.addRow({host: 'Grand Total', sesi: grandSesi, gmv: grandGmv, jam: parseFloat(grandJam)});
-        gtRow.font = {bold:true};
-        gtRow.getCell(3).numFmt = '"Rp "* #,##0';
-        gtRow.getCell(4).numFmt = '0.00';
-        
-        wsP.eachRow(row=>row.eachCell(cell=>cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}}));
+            const wsP = wb.addWorksheet('Pivot Total Jam');
+            wsP.columns = [
+                {header:'Row Labels (Host)', key:'host', width:25},
+                {header:'Count of Sesi', key:'sesi', width:15},
+                {header:'Sum of Total GMV', key:'gmv', width:25},
+                {header:'Sum of Jam Live', key:'jam', width:20}
+            ];
+            const hRP = wsP.getRow(1);
+            hRP.font={bold:true, color:{argb:'FF000000'}};
+            hRP.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFD9D9D9'}};
+            
+            let grandSesi = 0, grandGmv = 0, grandDetik = 0;
+            Object.keys(total).forEach(h => {
+                const hJam = (total[h].d / 3600).toFixed(2);
+                const rowP = wsP.addRow({host: h, sesi: total[h].sesiCount, gmv: total[h].g, jam: parseFloat(hJam)});
+                rowP.getCell(3).numFmt = '"Rp "* #,##0';
+                rowP.getCell(4).numFmt = '0.00';
+                grandSesi += total[h].sesiCount;
+                grandGmv += total[h].g;
+                grandDetik += total[h].d;
+            });
+            
+            const grandJam = (grandDetik / 3600).toFixed(2);
+            const gtRow = wsP.addRow({host: 'Grand Total', sesi: grandSesi, gmv: grandGmv, jam: parseFloat(grandJam)});
+            gtRow.font = {bold:true};
+            gtRow.getCell(3).numFmt = '"Rp "* #,##0';
+            gtRow.getCell(4).numFmt = '0.00';
+            
+            wsP.eachRow(row=>row.eachCell(cell=>cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}}));
 
-        const buf = await wb.xlsx.writeBuffer(); saveAs(new Blob([buf]), `Rekap_Live_Host_${new Date().toLocaleDateString('id-ID')}.xlsx`);
+            const buf = await wb.xlsx.writeBuffer(); 
+            saveAs(new Blob([buf]), `Rekap_Live_Host_${new Date().toLocaleDateString('id-ID')}.xlsx`);
+            Swal.close();
+        } catch(e) {
+            console.error(e);
+            Swal.fire('Error', 'Gagal membuat file Excel.', 'error');
+        }
     }
 
     window.onload = () => window.nav('loginPage');
