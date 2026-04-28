@@ -283,13 +283,17 @@
                     <button class="btn-success" onclick="exportExcelFull()" style="margin:0; width:auto;">📥 Download Excel</button>
                     <button class="btn-outline" onclick="resetFilter()" style="margin:0; width:auto;">Reset Filter</button>
                     <div style="flex-grow: 1;"></div>
-                    <button class="btn-danger" onclick="hapusSemuaData()" style="margin:0; width:auto;">🗑️ Kosongkan Data</button>
+                    <button class="btn-warning" onclick="hapusTerpilih()" style="margin:0; width:auto;">🗑️ Hapus Terpilih</button>
+                    <button class="btn-danger" onclick="hapusSesuaiFilter()" style="margin:0; width:auto;">⚠️ Hapus Data (Filter)</button>
                 </div>
             </div>
 
             <div class="table-container">
                 <table>
-                    <thead><tr><th>Host</th><th>Tgl</th><th>Platform</th><th>Jam Mulai</th><th>Selesai</th><th>GMV (Rp)</th><th>Durasi</th><th>Bukti</th><th>Aksi</th></tr></thead>
+                    <thead><tr>
+                        <th style="width: 30px; text-align: center;"><input type="checkbox" id="selectAllCheckbox" onclick="toggleAllCheckboxes()" style="width:16px; height:16px; cursor:pointer; margin:0;" title="Pilih Semua"></th>
+                        <th>Host</th><th>Tgl</th><th>Platform</th><th>Jam Mulai</th><th>Selesai</th><th>GMV (Rp)</th><th>Durasi</th><th>Bukti</th><th>Aksi</th>
+                    </tr></thead>
                     <tbody id="adminAbsensiBody"></tbody>
                 </table>
             </div>
@@ -355,6 +359,7 @@
     let users = [{u:'admin', p:'admin', r:'admin'}];
     let data = []; let resetRequests = []; let filteredDataCache = []; let timerInterval;
     window.sessionImages = {};
+    window.flattenedFilteredData = [];
     
     let isDataLoaded = false; let isUsersLoaded = false;
 
@@ -420,7 +425,6 @@
 
     function clearSemuaInput() { document.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]), select').forEach(el => el.value = ''); window.sessionImages = {}; }
     
-    // PEMBARUAN PADA FUNGSI FORMAT DURASI
     function formatDurasi(d) { 
         if (isNaN(d) || d == null) return "0 dtk";
         if (d < 60 && d >= 0) return `${d} dtk`; 
@@ -624,26 +628,65 @@
         });
     }
 
-    window.hapusSemuaData = function() {
+    // === FITUR HAPUS TERPILIH & CHECKBOX ===
+    window.toggleAllCheckboxes = function() {
+        const master = document.getElementById('selectAllCheckbox').checked;
+        document.querySelectorAll('.row-cb').forEach(cb => cb.checked = master);
+    }
+
+    window.hapusTerpilih = function() {
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
-        if(data.length === 0) return Swal.fire('Kosong', 'Tidak ada data untuk dihapus.', 'info');
+        const checked = Array.from(document.querySelectorAll('.row-cb:checked')).map(cb => String(cb.value));
+        if(checked.length === 0) return Swal.fire('Info', 'Pilih minimal 1 data menggunakan checkbox di tabel.', 'info');
+        
+        const uniqueIds = [...new Set(checked)];
+
+        Swal.fire({
+            title: 'Hapus Data Terpilih?',
+            text: `Anda akan menghapus ${uniqueIds.length} sesi Live. Tindakan ini tidak dapat dibatalkan.`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#e11d48',
+            confirmButtonText: 'Ya, Hapus!'
+        }).then((res) => {
+            if(res.isConfirmed) {
+                data = data.filter(d => !uniqueIds.includes(String(d.id)));
+                Swal.fire({title:'Menghapus...', didOpen:()=>Swal.showLoading()});
+                sync().then((ok) => {
+                    if(ok) {
+                        document.getElementById('selectAllCheckbox').checked = false;
+                        Swal.fire('Terhapus!', 'Data terpilih telah dihapus.', 'success');
+                    }
+                });
+            }
+        });
+    }
+
+    window.hapusSesuaiFilter = function() {
+        if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
+        if(!window.flattenedFilteredData || window.flattenedFilteredData.length === 0) return Swal.fire('Kosong', 'Tidak ada data yang sedang tampil/difilter.', 'info');
+        
+        const idsToDelete = [...new Set(window.flattenedFilteredData.map(x => String(x.id)))];
         
         Swal.fire({
-            title: 'HAPUS SEMUA DATA?',
-            text: "PASTIKAN ANDA SUDAH DOWNLOAD EXCEL! Data yang dihapus tidak bisa dikembalikan. Ketik 'HAPUS' (huruf besar) untuk konfirmasi:",
+            title: 'Hapus Data (Filter Saat Ini)?',
+            text: `PASTIKAN ANDA SUDAH DOWNLOAD EXCEL! Anda akan menghapus ${idsToDelete.length} sesi Live yang sesuai dengan filter tabel di bawah ini. Ketik 'HAPUS' (huruf besar) untuk konfirmasi:`,
             input: 'text',
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#e11d48',
-            confirmButtonText: 'Ya, Hapus Semua!'
+            confirmButtonText: 'Ya, Hapus Sesuai Filter!'
         }).then((res) => {
             if(res.isConfirmed) {
                 if(res.value === 'HAPUS') {
+                    data = data.filter(d => !idsToDelete.includes(String(d.id)));
                     Swal.fire({title:'Menghapus...', didOpen:()=>Swal.showLoading()});
-                    remove(ref(db, 'absensi_data')).then(() => {
-                        data = [];
-                        Swal.fire('Terhapus!', 'Semua data telah dibersihkan.', 'success');
-                    }).catch(err => Swal.fire('Error', 'Gagal menghapus data dari server.', 'error'));
+                    sync().then((ok) => {
+                        if(ok) {
+                            document.getElementById('selectAllCheckbox').checked = false;
+                            Swal.fire('Terhapus!', 'Semua data yang difilter telah dibersihkan.', 'success');
+                        }
+                    });
                 } else {
                     Swal.fire('Dibatalkan', 'Kata kunci salah. Data batal dihapus.', 'error');
                 }
@@ -715,7 +758,6 @@
         const buf = await wb.xlsx.writeBuffer(); saveAs(new Blob([buf]), `Template_Upload_Manual.xlsx`);
     }
 
-    // === PEROMBAKAN TOTAL LOGIKA BACA WAKTU UPLOAD MANUAL ===
     window.prosesUploadManual = function() {
         const fI = document.getElementById('manualUploadFile'); if(fI.files.length===0) return Swal.fire('Error','Pilih file Excel!','warning');
         const r = new FileReader();
@@ -727,14 +769,12 @@
             let updates = {};
             let nextIdx = data.length;
 
-            // Fungsi kebal/pintar untuk baca segala format jam (bahkan desimal pecahan Excel)
             function pTime(v) {
                 if(!v) return {h:0, m:0, s:0};
                 let s = String(v).trim().toUpperCase();
                 let isP = s.includes('PM'), isA = s.includes('AM');
                 s = s.replace(/AM|PM/g, '').trim();
                 
-                // Cek jika Excel mengkonversinya ke angka desimal waktu murni (contoh: 0.83333333)
                 if(!isNaN(s) && Number(s) > 0 && Number(s) < 1) {
                     let sec = Math.round(Number(s) * 86400);
                     return {h: Math.floor(sec/3600), m: Math.floor((sec%3600)/60), s: sec%60};
@@ -747,14 +787,13 @@
                 return {h, m, s:sec};
             }
 
-            // Fungsi kebal untuk baca tanggal (MM/DD/YYYY atau YYYY-MM-DD atau Serial Excel)
             function pDate(v) {
                 if(!v) return new Date();
                 if(!isNaN(v) && Number(v) > 20000) return new Date(Math.round((Number(v) - 25569) * 86400 * 1000));
                 let d = new Date(v); if(!isNaN(d.getTime())) return d;
                 let p = String(v).split(/[\/\-]/);
                 if(p.length === 3) {
-                    if(Number(p[0]) > 12) return new Date(`${p[2]}-${p[1]}-${p[0]}`); // DD/MM/YYYY fallback
+                    if(Number(p[0]) > 12) return new Date(`${p[2]}-${p[1]}-${p[0]}`);
                 }
                 return new Date();
             }
@@ -764,7 +803,6 @@
                 const t = row['Tanggal (YYYY-MM-DD)']||row['t']||row['Tanggal'];
                 const p = row['Platform']||row['p'];
                 
-                // Bisa membaca header versi baru (ada AM/PM) maupun yang lama
                 const rawMulai = row['Jam Mulai (hh:mm:ss AM/PM)']||row['Jam Mulai']||row['m'];
                 const rawAkhir = row['Jam Selesai (hh:mm:ss AM/PM)']||row['Jam Selesai']||row['a'];
                 const g = parseInt(row['GMV Total (Rp)']||row['GMV Total']||row['g']||0);
@@ -773,17 +811,15 @@
                     let sT = pTime(rawMulai);
                     let eT = pTime(rawAkhir);
                     
-                    // Kalkulasi detik sangat absolut, tidak terpengaruh error Date() browser
                     let sSec = (sT.h * 3600) + (sT.m * 60) + sT.s;
                     let eSec = (eT.h * 3600) + (eT.m * 60) + eT.s;
                     
                     let dtk = eSec - sSec;
-                    if(dtk < 0) dtk += 86400; // Logika otomatis jika Live melewati tengah malam
+                    if(dtk < 0) dtk += 86400; 
                     
                     let bD = pDate(t);
                     let ts = new Date(bD).setHours(sT.h, sT.m, sT.s, 0);
                     
-                    // Rapikan format agar selalu rapi HH:mm:ss di database dan tabel UI
                     let fTgl = `${bD.getFullYear()}-${String(bD.getMonth()+1).padStart(2,'0')}-${String(bD.getDate()).padStart(2,'0')}`;
                     let fM = `${String(sT.h).padStart(2,'0')}:${String(sT.m).padStart(2,'0')}:${String(sT.s).padStart(2,'0')}`;
                     let fA = `${String(eT.h).padStart(2,'0')}:${String(eT.m).padStart(2,'0')}:${String(eT.s).padStart(2,'0')}`;
@@ -802,7 +838,6 @@
             } else Swal.fire('Gagal','Tidak ada baris valid. Pastikan header sesuai template.','error');
         }; r.readAsArrayBuffer(fI.files[0]);
     }
-    // ==============================================================
 
     window.myDailyChart = null; window.myTargetChart = null;
     function updateGrafikDropdown() { const s = document.getElementById('grafikHostSelect'); if(!s) return; s.innerHTML=''; const hs=users.filter(u=>u.r==='host'); if(hs.length===0) return s.innerHTML='<option>Belum ada Host</option>'; hs.forEach(h=>s.innerHTML+=`<option value="${h.u}">${h.u}</option>`); }
@@ -871,20 +906,33 @@
         });
         window.flattenedFilteredData.sort((a,b) => b.timestamp - a.timestamp);
         const b = document.getElementById('adminAbsensiBody'); b.innerHTML = '';
-        if(window.flattenedFilteredData.length===0) return b.innerHTML = `<tr><td colspan="9" style="text-align:center;">Data tidak ditemukan.</td></tr>`;
+        if(window.flattenedFilteredData.length===0) return b.innerHTML = `<tr><td colspan="10" style="text-align:center;">Data tidak ditemukan.</td></tr>`;
         window.flattenedFilteredData.forEach(x => {
             let imgDisplay = `<img src="${x.imgDisplay}" class="img-preview" onclick="lihatFoto('${x.imgDisplay}')">`;
-            b.innerHTML += `<tr><td style="font-weight:700;">${x.host}</td><td>${x.tgl}</td><td><span class="badge">${x.plat}</span></td><td style="font-variant-numeric:tabular-nums;">${x.mulai}</td><td style="font-variant-numeric:tabular-nums;">${x.akhir}</td><td style="color:#10b981; font-weight:700;">${formatRp(x.gmvDisplay)}</td><td>${formatDurasi(x.detik)}</td><td>${imgDisplay}</td><td style="display:flex; gap:4px; flex-wrap:wrap; width: 140px;"><button onclick="editGmvAdmin('${x.id}', '${x.plat}')" class="btn-info" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Nominal GMV">GMV</button><button onclick="editWaktuAdmin('${x.id}')" class="btn-success" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Jam Mulai/Selesai">Jam</button><button onclick="editFoto('${x.id}', '${x.plat}')" class="btn-warning" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Screenshot">SS</button><button onclick="hapusRiwayat('${x.id}')" class="btn-outline" style="color:var(--accent); border-color:var(--accent); padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Hapus Permanen">Hapus</button></td></tr>`;
+            b.innerHTML += `<tr><td style="text-align:center;"><input type="checkbox" class="row-cb" value="${x.id}" style="width: 15px; height: 15px; cursor: pointer; margin: 0;"></td><td style="font-weight:700;">${x.host}</td><td>${x.tgl}</td><td><span class="badge">${x.plat}</span></td><td style="font-variant-numeric:tabular-nums;">${x.mulai}</td><td style="font-variant-numeric:tabular-nums;">${x.akhir}</td><td style="color:#10b981; font-weight:700;">${formatRp(x.gmvDisplay)}</td><td>${formatDurasi(x.detik)}</td><td>${imgDisplay}</td><td style="display:flex; gap:4px; flex-wrap:wrap; width: 140px;"><button onclick="editGmvAdmin('${x.id}', '${x.plat}')" class="btn-info" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Nominal GMV">GMV</button><button onclick="editWaktuAdmin('${x.id}')" class="btn-success" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Jam Mulai/Selesai">Jam</button><button onclick="editFoto('${x.id}', '${x.plat}')" class="btn-warning" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Screenshot">SS</button><button onclick="hapusRiwayat('${x.id}')" class="btn-outline" style="color:var(--accent); border-color:var(--accent); padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Hapus Permanen">Hapus</button></td></tr>`;
         });
     }
 
+    // === MODIFIKASI DOWNLOAD EXCEL ===
     window.exportExcelFull = async function() {
-        if(window.flattenedFilteredData.length===0) return Swal.fire('Kosong','Tidak ada data didownload.','info');
+        if(window.flattenedFilteredData.length===0) return Swal.fire('Kosong','Tidak ada data yang tersedia untuk didownload.','info');
+        
+        // Ambil data yang dicentang (jika ada)
+        const checkedBoxes = Array.from(document.querySelectorAll('.row-cb:checked')).map(cb => String(cb.value));
+        let dataToExport = window.flattenedFilteredData;
+        
+        // Jika ada checkbox yang dicentang, hanya eksport yang dicentang
+        if (checkedBoxes.length > 0) {
+            dataToExport = window.flattenedFilteredData.filter(x => checkedBoxes.includes(String(x.id)));
+        }
+
+        if(dataToExport.length === 0) return Swal.fire('Kosong', 'Tidak ada data terpilih untuk didownload.', 'info');
+
         const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('Rekap Detail');
         ws.columns = [{header:'Host',key:'host',width:20},{header:'Tanggal',key:'tgl',width:15},{header:'Platform',key:'plat',width:20},{header:'Jam Mulai',key:'mulai',width:15},{header:'Jam Selesai',key:'akhir',width:15},{header:'GMV (Rp)',key:'gmv',width:20},{header:'Durasi',key:'durasi',width:18},{header:'Bukti',key:'bukti',width:20}];
         const hR = ws.getRow(1); hR.font={bold:true,color:{argb:'FFFFFFFF'}}; hR.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF5A67D8'}}; hR.alignment={vertical:'middle',horizontal:'center'};
         
-        window.flattenedFilteredData.forEach((x, i) => {
+        dataToExport.forEach((x, i) => {
             const rIdx = i+2; 
             ws.addRow({host:x.host,tgl:x.tgl,plat:x.plat,mulai:x.mulai,akhir:x.akhir,gmv:x.gmvDisplay||0,durasi:formatDurasi(x.detik)}); 
             ws.getRow(rIdx).height=55; ws.getRow(rIdx).alignment={vertical:'middle',horizontal:'left'}; ws.getCell(`F${rIdx}`).numFmt = '"Rp "* #,##0'; 
@@ -895,11 +943,11 @@
         });
         ws.eachRow(row=>row.eachCell(cell=>cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}}));
         
-        const wsT = wb.addWorksheet('Total Waktu'); wsT.columns = [{header:'Nama Host',key:'host',width:20},{header:'Sesi',key:'sesi',width:15},{header:'Total GMV (Sesuai Filter)',key:'gmv',width:30},{header:'Total Waktu',key:'waktu',width:20}];
+        const wsT = wb.addWorksheet('Total Waktu'); wsT.columns = [{header:'Nama Host',key:'host',width:20},{header:'Sesi',key:'sesi',width:15},{header:'Total GMV',key:'gmv',width:30},{header:'Total Waktu',key:'waktu',width:20}];
         wsT.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}}; wsT.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF10B981'}};
         
         const total = {}; const seenIds = new Set();
-        window.flattenedFilteredData.forEach(x => { 
+        dataToExport.forEach(x => { 
             if(!total[x.host]) total[x.host]={d:0, g:0, sesiCount:0}; 
             total[x.host].g += (x.gmvDisplay || 0); 
             if(!seenIds.has(x.id)) { seenIds.add(x.id); total[x.host].d += x.detik; total[x.host].sesiCount += 1; }
