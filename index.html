@@ -303,10 +303,35 @@
             <h3 style="margin-bottom: 20px;">Grafik Analitik Performa & GMV</h3>
             
             <div style="background: rgba(0,0,0,0.02); padding: 15px 20px; border-radius: 12px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; border: 1px solid var(--glass-border);">
-                <div><label>Pilih Host:</label><select id="grafikHostSelect" onchange="updateGrafik()"></select></div>
+                <div>
+                    <label>Filter Host:</label>
+                    <div class="custom-select-wrapper">
+                        <div class="custom-select-trigger" onclick="toggleDropdown('grafikHostDropdown')">
+                            <span id="grafikHostSelectedText">Semua Host</span> <span>▼</span>
+                        </div>
+                        <div class="custom-options" id="grafikHostDropdown">
+                            <div class="checkbox-list" id="grafikHostList"></div>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label>Filter Platform:</label>
+                    <div class="custom-select-wrapper">
+                        <div class="custom-select-trigger" onclick="toggleDropdown('grafikPlatDropdown')">
+                            <span id="grafikPlatSelectedText">Semua Platform</span> <span>▼</span>
+                        </div>
+                        <div class="custom-options" id="grafikPlatDropdown">
+                            <div class="checkbox-list">
+                                <label><input type="checkbox" class="grafik-plat-cb" value="TikTok" onchange="updateGrafikPlatText()"> TikTok</label>
+                                <label><input type="checkbox" class="grafik-plat-cb" value="Shopee" onchange="updateGrafikPlatText()"> Shopee</label>
+                                <label><input type="checkbox" class="grafik-plat-cb" value="Instagram" onchange="updateGrafikPlatText()"> Instagram</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <div><label>Tgl Mulai:</label><input type="date" id="grafikStartDate"></div>
                 <div><label>Tgl Akhir:</label><input type="date" id="grafikEndDate"></div>
-                <div style="display:flex; align-items:flex-end;"><button class="btn-primary" onclick="updateGrafik()" style="margin:0; height: 38px;">Terapkan Filter</button></div>
+                <div style="grid-column: 1 / -1; display:flex; justify-content: flex-end;"><button class="btn-primary" onclick="updateGrafik()" style="margin:0; width: 250px;">Terapkan Filter Grafik</button></div>
             </div>
 
             <div class="stats-grid">
@@ -317,17 +342,17 @@
             </div>
 
             <div class="chart-wrapper">
-                <h3 style="margin-bottom: 15px; font-size: 0.95rem; color: var(--text-dim);">📋 Rincian Sesi & GMV per Platform</h3>
+                <h3 style="margin-bottom: 15px; font-size: 0.95rem; color: var(--text-dim);">📋 Rincian Sesi & GMV (Berdasarkan Filter)</h3>
                 <div class="table-container" style="margin-top: 0; margin-bottom: 0;">
                     <table>
-                        <thead><tr><th>Tanggal</th><th>Waktu Live</th><th>Platform</th><th>GMV (Rp)</th></tr></thead>
+                        <thead><tr><th>Tanggal</th><th>Host</th><th>Waktu Live</th><th>Platform</th><th>GMV (Rp)</th></tr></thead>
                         <tbody id="gmvListBody"></tbody>
                     </table>
                 </div>
             </div>
 
-            <div class="chart-wrapper"><h3 style="margin-bottom: 15px; font-size: 0.95rem; color: var(--text-dim);">📈 Tren Jam Live Harian</h3><div style="position: relative; height: 220px; width: 100%;"><canvas id="dailyLineChart"></canvas></div></div>
-            <div class="chart-wrapper"><h3 style="margin-bottom: 15px; font-size: 0.95rem; color: var(--text-dim);">📊 Perbandingan Pencapaian Target</h3><div style="position: relative; height: 220px; width: 100%;"><canvas id="targetBarChart"></canvas></div></div>
+            <div class="chart-wrapper"><h3 style="margin-bottom: 15px; font-size: 0.95rem; color: var(--text-dim);">📈 Tren Jam Live Harian (Gabungan)</h3><div style="position: relative; height: 220px; width: 100%;"><canvas id="dailyLineChart"></canvas></div></div>
+            <div class="chart-wrapper"><h3 style="margin-bottom: 15px; font-size: 0.95rem; color: var(--text-dim);">📊 Pencapaian vs Target (Gabungan)</h3><div style="position: relative; height: 220px; width: 100%;"><canvas id="targetBarChart"></canvas></div></div>
         </div>
 
         <div id="tab-upload" class="tab-content">
@@ -340,7 +365,6 @@
 </div>
 
 <script type="module">
-    // HANYA MENGGUNAKAN REALTIME DATABASE (TANPA STORAGE)
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getDatabase, ref, onValue, set, update, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
@@ -400,20 +424,18 @@
         } catch(e) { console.error(e); Swal.fire('Error', 'Gagal menyimpan ke server.', 'error'); return false; }
     };
 
-    // ULTRA-COMPRESSION: Gambar diperkecil secara drastis agar Realtime Database tidak lemot
     window.compressImage = function(file, callback) {
         const reader = new FileReader();
         reader.onload = function(e) {
             const img = new Image();
             img.onload = function() {
                 const canvas = document.createElement('canvas'); 
-                const MAX_DIM = 250; // Mengecilkan resolusi maksimal ke 250px
+                const MAX_DIM = 250;
                 let width = img.width, height = img.height;
                 if (width > height && width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; }
                 else if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; }
                 canvas.width = width; canvas.height = height;
                 const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
-                // Kualitas diturunkan ke 30% (Sangat ringan tapi masih terlihat angkanya)
                 callback(canvas.toDataURL('image/jpeg', 0.3)); 
             }
             img.src = e.target.result;
@@ -846,41 +868,113 @@
         }; r.readAsArrayBuffer(fI.files[0]);
     }
 
+    // === MODIFIKASI FILTER GRAFIK & TARGET ===
     window.myDailyChart = null; window.myTargetChart = null;
-    function updateGrafikDropdown() { const s = document.getElementById('grafikHostSelect'); if(!s) return; s.innerHTML=''; const hs=users.filter(u=>u.r==='host'); if(hs.length===0) return s.innerHTML='<option>Belum ada Host</option>'; hs.forEach(h=>s.innerHTML+=`<option value="${h.u}">${h.u}</option>`); }
+    
+    function updateGrafikDropdown() { 
+        const c = document.getElementById('grafikHostList'); if(!c) return; 
+        c.innerHTML=''; 
+        users.filter(u=>u.r==='host').forEach(h=>c.innerHTML+=`<label><input type="checkbox" class="grafik-host-cb" value="${h.u}" onchange="updateGrafikHostText()"> ${h.u}</label>`); 
+    }
+
+    window.updateGrafikHostText = function() { 
+        const c = document.querySelectorAll('.grafik-host-cb:checked'); 
+        document.getElementById('grafikHostSelectedText').innerText = c.length===0 ? "Semua Host" : (c.length===1 ? c[0].value : `${c.length} Host`); 
+    }
+    
+    window.updateGrafikPlatText = function() { 
+        const c = document.querySelectorAll('.grafik-plat-cb:checked'); 
+        document.getElementById('grafikPlatSelectedText').innerText = c.length===0 ? "Semua Platform" : (c.length===1 ? c[0].value : `${c.length} Plat`); 
+    }
+
     window.updateGrafik = function() {
-        const hN = document.getElementById('grafikHostSelect').value; if(!hN||hN==='Belum ada Host') return;
-        const sD = document.getElementById('grafikStartDate').value, eD = document.getElementById('grafikEndDate').value;
-        const hU = users.find(u=>u.u===hN), tM = hU?(hU.targetMingguan||0):0, tB = tM*4, tH = tM>0?(tM/7).toFixed(1):0;
-        let hD = data.filter(d=>d.host===hN);
-        if(sD) { const sTs = new Date(sD).setHours(0,0,0,0); hD = hD.filter(d => d.timestamp >= sTs); }
-        if(eD) { const eTs = new Date(eD).setHours(23,59,59,999); hD = hD.filter(d => d.timestamp <= eTs); }
-        let totalDetik = 0, totalGmv = 0, totalSesi = hD.length;
+        const hCbs = Array.from(document.querySelectorAll('.grafik-host-cb:checked')).map(cb=>cb.value);
+        const pCbs = Array.from(document.querySelectorAll('.grafik-plat-cb:checked')).map(cb=>cb.value);
+        const sD = document.getElementById('grafikStartDate').value;
+        const eD = document.getElementById('grafikEndDate').value;
+        
+        let selectedUsers = users.filter(u => u.r === 'host');
+        if (hCbs.length > 0) selectedUsers = selectedUsers.filter(u => hCbs.includes(u.u));
+        
+        const tM = selectedUsers.reduce((sum, u) => sum + (u.targetMingguan || 0), 0);
+        const tB = tM * 4;
+        const tH = tM > 0 ? (tM / 7).toFixed(1) : 0;
+
+        let baseData = data.filter(i => {
+            const mH = hCbs.length === 0 || hCbs.includes(i.host);
+            let mD = true;
+            if(sD && i.timestamp < new Date(sD).setHours(0,0,0,0)) mD = false;
+            if(eD && i.timestamp > new Date(eD).setHours(23,59,59,999)) mD = false;
+            return mH && mD;
+        });
+
+        let flattenedData = [];
+        baseData.forEach(x => {
+            if(x.platformsData && x.platformsData.length > 0) {
+                x.platformsData.forEach(pd => { 
+                    if(pCbs.length === 0 || pCbs.includes(pd.plat)) flattenedData.push({ ...x, plat: pd.plat, gmvDisplay: pd.gmv }); 
+                });
+            } else {
+                const platsArr = x.plat.split(',').map(s => s.trim());
+                const matchedPlats = pCbs.length === 0 ? platsArr : platsArr.filter(p => pCbs.includes(p));
+                matchedPlats.forEach(m => flattenedData.push({ ...x, plat: m, gmvDisplay: x.totalGmv || x.gmv || 0 }));
+            }
+        });
+        
+        let totalDetik = 0, totalGmv = 0, totalSesi = 0;
         const dailyMap = {}; 
-        hD.forEach(d=>{ totalDetik += d.detik; totalGmv += (d.totalGmv !== undefined ? d.totalGmv : (d.gmv || 0)); if(!dailyMap[d.tgl]) dailyMap[d.tgl]=0; dailyMap[d.tgl]+=d.detik; });
+        const seenIds = new Set();
+        
+        flattenedData.forEach(d => {
+            totalGmv += (d.gmvDisplay || 0);
+            if (!seenIds.has(d.id)) {
+                seenIds.add(d.id);
+                totalDetik += d.detik;
+                totalSesi++;
+                if(!dailyMap[d.tgl]) dailyMap[d.tgl] = 0;
+                dailyMap[d.tgl] += d.detik;
+            }
+        });
+
         document.getElementById('statJam').innerText = (totalDetik / 3600).toFixed(1) + ' Jam';
         document.getElementById('statSesi').innerText = totalSesi + ' Sesi';
         document.getElementById('statGmv').innerText = formatRp(totalGmv);
         document.getElementById('statAvgGmv').innerText = totalSesi > 0 ? formatRp(totalGmv / totalSesi) : 'Rp 0';
+        
         const gmvListBody = document.getElementById('gmvListBody'); gmvListBody.innerHTML = '';
-        if(hD.length === 0) { gmvListBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Kosong.</td></tr>'; } 
-        else {
-            hD.slice().reverse().forEach(d => {
-                if(d.platformsData && d.platformsData.length > 0) { d.platformsData.forEach(pd => { let pB = `<span class="badge">${pd.plat}</span>`; gmvListBody.innerHTML += `<tr><td>${d.tgl}</td><td style="color:var(--text-dim);">${d.mulai}-${d.akhir}</td><td>${pB}</td><td style="font-weight:700; color:#10b981;">${formatRp(pd.gmv)}</td></tr>`; }); } 
-                else { let pB = d.plat.split(', ').map(p => `<span class="badge">${p}</span>`).join(''); let g = d.totalGmv !== undefined ? d.totalGmv : (d.gmv || 0); gmvListBody.innerHTML += `<tr><td>${d.tgl}</td><td style="color:var(--text-dim);">${d.mulai}-${d.akhir}</td><td>${pB}</td><td style="font-weight:700; color:#10b981;">${formatRp(g)}</td></tr>`; }
+        if(flattenedData.length === 0) { 
+            gmvListBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Kosong.</td></tr>'; 
+        } else {
+            flattenedData.sort((a,b) => b.timestamp - a.timestamp).forEach(d => {
+                let pB = `<span class="badge">${d.plat}</span>`;
+                gmvListBody.innerHTML += `<tr><td>${d.tgl}</td><td style="font-weight:700;">${d.host}</td><td style="color:var(--text-dim); font-variant-numeric:tabular-nums;">${d.mulai}-${d.akhir}</td><td>${pB}</td><td style="font-weight:700; color:#10b981;">${formatRp(d.gmvDisplay)}</td></tr>`;
             });
         }
+        
         const lD = Object.keys(dailyMap).sort(), vD = lD.map(t=>(dailyMap[t]/3600).toFixed(1)), tDL = lD.map(()=>tH);
+        
         const wR = getWeekRange(), mR = getMonthRange();
-        const dMI = data.filter(d => d.host===hN && d.timestamp>=wR.start && d.timestamp<=wR.end).reduce((s,c)=>s+c.detik,0);
-        const dBI = data.filter(d => d.host===hN && d.timestamp>=mR.start && d.timestamp<=mR.end).reduce((s,c)=>s+c.detik,0);
+        let dMI = 0, dBI = 0;
+        const targetSeenIdsWeek = new Set(), targetSeenIdsMonth = new Set();
+        
+        flattenedData.forEach(d => {
+            if (d.timestamp >= wR.start && d.timestamp <= wR.end) {
+                if (!targetSeenIdsWeek.has(d.id)) { targetSeenIdsWeek.add(d.id); dMI += d.detik; }
+            }
+            if (d.timestamp >= mR.start && d.timestamp <= mR.end) {
+                if (!targetSeenIdsMonth.has(d.id)) { targetSeenIdsMonth.add(d.id); dBI += d.detik; }
+            }
+        });
+        
         const iL = document.body.classList.contains('light-mode'); Chart.defaults.color = iL?'#4a5568':'#94a3b8'; Chart.defaults.font.family="'Plus Jakarta Sans', sans-serif";
         const cO = { responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'top',labels:{usePointStyle:true}}, tooltip:{backgroundColor:iL?'rgba(0,0,0,0.8)':'rgba(255,255,255,0.9)', padding:10, cornerRadius:8} }, scales:{ x:{display:false}, y:{display:false} } };
+        
         if(window.myDailyChart) window.myDailyChart.destroy();
         const ctxD = document.getElementById('dailyLineChart').getContext('2d'); let g = ctxD.createLinearGradient(0,0,0,300); g.addColorStop(0,'rgba(90,103,216,0.5)'); g.addColorStop(1,'rgba(90,103,216,0.0)');
-        window.myDailyChart = new Chart(ctxD, { type:'line', data:{ labels:lD.length>0?lD:['-'], datasets:[ {label:'Pencapaian',data:vD.length>0?vD:[0],borderColor:'#5a67d8',backgroundColor:g,fill:true,tension:0.4,pointRadius:4}, {label:'Target',data:tDL,borderColor:'#f59e0b',borderDash:[6,6],pointRadius:0} ]}, options:cO });
+        window.myDailyChart = new Chart(ctxD, { type:'line', data:{ labels:lD.length>0?lD:['-'], datasets:[ {label:'Pencapaian',data:vD.length>0?vD:[0],borderColor:'#5a67d8',backgroundColor:g,fill:true,tension:0.4,pointRadius:4}, {label:'Target Gabungan',data:tDL,borderColor:'#f59e0b',borderDash:[6,6],pointRadius:0} ]}, options:cO });
+        
         if(window.myTargetChart) window.myTargetChart.destroy();
-        window.myTargetChart = new Chart(document.getElementById('targetBarChart').getContext('2d'), { type:'bar', data:{ labels:['Minggu Ini','Bulan Ini'], datasets:[ {label:'Tercapai',data:[(dMI/3600).toFixed(1),(dBI/3600).toFixed(1)],backgroundColor:'#5a67d8',borderRadius:8}, {label:'Target',data:[tM,tB],backgroundColor:'rgba(244,63,94,0.4)',borderRadius:8} ]}, options:cO });
+        window.myTargetChart = new Chart(document.getElementById('targetBarChart').getContext('2d'), { type:'bar', data:{ labels:['Minggu Ini','Bulan Ini'], datasets:[ {label:'Tercapai',data:[(dMI/3600).toFixed(1),(dBI/3600).toFixed(1)],backgroundColor:'#5a67d8',borderRadius:8}, {label:'Target Gabungan',data:[tM,tB],backgroundColor:'rgba(244,63,94,0.4)',borderRadius:8} ]}, options:cO });
     }
 
     window.toggleDropdown = function(id) { document.querySelectorAll('.custom-options').forEach(el => { if(el.id !== id) el.classList.remove('open'); }); document.getElementById(id).classList.toggle('open'); }
@@ -913,10 +1007,10 @@
         });
         window.flattenedFilteredData.sort((a,b) => b.timestamp - a.timestamp);
         const b = document.getElementById('adminAbsensiBody'); b.innerHTML = '';
-        if(window.flattenedFilteredData.length===0) return b.innerHTML = `<tr><td colspan=\"10\" style=\"text-align:center;\">Data tidak ditemukan.</td></tr>`;
+        if(window.flattenedFilteredData.length===0) return b.innerHTML = `<tr><td colspan="10" style="text-align:center;">Data tidak ditemukan.</td></tr>`;
         window.flattenedFilteredData.forEach(x => {
             let imgDisplay = `<img src="${x.imgDisplay}" class="img-preview" onclick="lihatFoto('${x.imgDisplay}')">`;
-            b.innerHTML += `<tr><td style=\"text-align:center;\"><input type=\"checkbox\" class=\"row-cb\" value=\"${x.id}\" style=\"width: 15px; height: 15px; cursor: pointer; margin: 0;\"></td><td style=\"font-weight:700;\">${x.host}</td><td>${x.tgl}</td><td><span class=\"badge\">${x.plat}</span></td><td style=\"font-variant-numeric:tabular-nums;\">${x.mulai}</td><td style=\"font-variant-numeric:tabular-nums;\">${x.akhir}</td><td style=\"color:#10b981; font-weight:700;\">${formatRp(x.gmvDisplay)}</td><td>${formatDurasi(x.detik)}</td><td>${imgDisplay}</td><td style=\"display:flex; gap:4px; flex-wrap:wrap; width: 140px;\"><button onclick=\"editGmvAdmin('${x.id}', '${x.plat}')\" class=\"btn-info\" style=\"padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;\" title=\"Edit Nominal GMV\">GMV</button><button onclick=\"editWaktuAdmin('${x.id}')\" class=\"btn-success\" style=\"padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;\" title=\"Edit Jam Mulai/Selesai\">Jam</button><button onclick=\"editFoto('${x.id}', '${x.plat}')\" class=\"btn-warning\" style=\"padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;\" title=\"Edit Screenshot\">SS</button><button onclick=\"hapusRiwayat('${x.id}')\" class=\"btn-outline\" style=\"color:var(--accent); border-color:var(--accent); padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;\" title=\"Hapus Permanen\">Hapus</button></td></tr>`;
+            b.innerHTML += `<tr><td style="text-align:center;"><input type="checkbox" class="row-cb" value="${x.id}" style="width: 15px; height: 15px; cursor: pointer; margin: 0;"></td><td style="font-weight:700;">${x.host}</td><td>${x.tgl}</td><td><span class="badge">${x.plat}</span></td><td style="font-variant-numeric:tabular-nums;">${x.mulai}</td><td style="font-variant-numeric:tabular-nums;">${x.akhir}</td><td style="color:#10b981; font-weight:700;">${formatRp(x.gmvDisplay)}</td><td>${formatDurasi(x.detik)}</td><td>${imgDisplay}</td><td style="display:flex; gap:4px; flex-wrap:wrap; width: 140px;"><button onclick="editGmvAdmin('${x.id}', '${x.plat}')" class="btn-info" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Nominal GMV">GMV</button><button onclick="editWaktuAdmin('${x.id}')" class="btn-success" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Jam Mulai/Selesai">Jam</button><button onclick="editFoto('${x.id}', '${x.plat}')" class="btn-warning" style="padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Edit Screenshot">SS</button><button onclick="hapusRiwayat('${x.id}')" class="btn-outline" style="color:var(--accent); border-color:var(--accent); padding:4px 8px; font-size:0.7rem; width:auto; border-radius:6px; margin-bottom:2px;" title="Hapus Permanen">Hapus</button></td></tr>`;
         });
     }
 
