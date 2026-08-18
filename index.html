@@ -367,6 +367,7 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getDatabase, ref, onValue, set, update, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+    import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyBUplQfjuqQxpGkA9d2ULdpzcrSBG1YftI",
@@ -380,6 +381,7 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
+    const storage = getStorage(app);
 
     let users = [{u:'admin', p:'admin', r:'admin'}];
     let data = []; let resetRequests = []; let filteredDataCache = []; let timerInterval;
@@ -545,35 +547,51 @@
         }).catch(err => { statusEl.innerHTML = '❌ Gagal. Ketik manual.'; statusEl.style.color = 'var(--accent)'; });
     }
 
-    window.selesai = function() {
+    // MODIFIKASI: fungsi selesai() menggunakan Firebase Storage
+    window.selesai = async function() {
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem masih memuat data server.', 'warning');
         const u = localStorage.getItem('activeUser'), sess = JSON.parse(localStorage.getItem('sess_'+u));
         const missing = sess.plats.filter(p => !window.sessionImages[p]);
         if(missing.length > 0) return Swal.fire({icon:'warning', title: 'Belum Lengkap!', text: `Harap upload SS untuk: ${missing.join(', ')}`});
         
+        Swal.fire({ title: 'Mengunggah Data...', text: 'Mengirim gambar ke server, JANGAN tutup aplikasi!', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+        
         let platformsData = [], totalGmvAccumulated = 0;
-        sess.plats.forEach(p => { 
-            const gmvVal = parseInt(document.getElementById(`gmv_${p}`).value || 0); 
-            totalGmvAccumulated += gmvVal; 
-            platformsData.push({ plat: p, img: window.sessionImages[p], gmv: gmvVal }); 
-        });
-        const end = Date.now(), detik = Math.floor((end - sess.start) / 1000);
         
-        const newRecord = { id: Date.now() + Math.random(), host: u, plat: sess.plats.join(', '), timestamp: sess.start, tgl: new Date(sess.start).toLocaleDateString('en-CA'), mulai: new Date(sess.start).toLocaleTimeString('en-GB'), akhir: new Date(end).toLocaleTimeString('en-GB'), detik: detik, totalGmv: totalGmvAccumulated, platformsData: platformsData };
-        
-        Swal.fire({ title: 'Menyimpan Data...', text: 'Mengirim ke server, JANGAN tutup aplikasi!', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
-        
-        const newIndex = data.length;
-        set(ref(db, `absensi_data/${newIndex}`), newRecord).then(() => {
+        try {
+            for (const p of sess.plats) {
+                const gmvVal = parseInt(document.getElementById(`gmv_${p}`).value || 0); 
+                totalGmvAccumulated += gmvVal; 
+                
+                const base64Img = window.sessionImages[p];
+                const fileName = `bukti_ss/${u}_${Date.now()}_${p}.jpg`;
+                const imageRef = storageRef(storage, fileName);
+                
+                await uploadString(imageRef, base64Img, 'data_url');
+                const downloadUrl = await getDownloadURL(imageRef);
+                
+                platformsData.push({ plat: p, img: downloadUrl, gmv: gmvVal }); 
+            }
+
+            const end = Date.now(), detik = Math.floor((end - sess.start) / 1000);
+            
+            const newRecord = { id: Date.now() + Math.random(), host: u, plat: sess.plats.join(', '), timestamp: sess.start, tgl: new Date(sess.start).toLocaleDateString('en-CA'), mulai: new Date(sess.start).toLocaleTimeString('en-GB'), akhir: new Date(end).toLocaleTimeString('en-GB'), detik: detik, totalGmv: totalGmvAccumulated, platformsData: platformsData };
+            
+            const newIndex = data.length;
+            await set(ref(db, `absensi_data/${newIndex}`), newRecord);
+            
             localStorage.removeItem('sess_'+u); clearInterval(timerInterval); window.sessionImages = {}; document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; 
             Swal.fire({icon:'success',title:'Disimpan!'}); 
-        }).catch(err => {
-            Swal.fire('Error', 'Gagal terhubung ke server. Coba lagi.', 'error');
-        });
+            
+        } catch(err) {
+            console.error(err);
+            Swal.fire('Error', 'Gagal mengunggah ke server. Coba lagi.', 'error');
+        }
     }
 
     window.lihatFoto = function(imgSrc) { Swal.fire({ imageUrl: imgSrc, imageAlt: 'Bukti SS', showConfirmButton: false, width: 'auto', padding: '1em', background: 'transparent', backdrop: 'rgba(0,0,0,0.85)' }); }
 
+    // MODIFIKASI: fungsi editFoto() menggunakan Firebase Storage
     window.editFoto = function(idStr, platName) {
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
         const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*';
@@ -585,21 +603,36 @@
                     const regex = /(?:Rp|IDR|\$)?\s*([0-9]{1,3}(?:\.[0-9]{3})*(?:\,[0-9]{1,2})?)/gi; let match; let highest = 0;
                     while ((match = regex.exec(text)) !== null) { let val = parseInt(match[1].replace(/\./g, '').replace(/\,/g, '')); if(!isNaN(val) && val > highest) highest = val; }
                     
-                    Swal.fire({ title: 'Konfirmasi GMV Baru', text: `Platform: ${platName}. Edit jika AI salah.`, input: 'number', inputValue: highest > 100 ? highest : '', imageUrl: compressedB64, imageHeight: 200, showCancelButton: true, confirmButtonText: 'Simpan Perubahan' }).then(res => {
+                    Swal.fire({ title: 'Konfirmasi GMV Baru', text: `Platform: ${platName}. Edit jika AI salah.`, input: 'number', inputValue: highest > 100 ? highest : '', imageUrl: compressedB64, imageHeight: 200, showCancelButton: true, confirmButtonText: 'Simpan Perubahan' }).then(async res => {
                         if(res.isConfirmed) {
-                            const newGmv = parseInt(res.value || 0); const index = data.findIndex(d => String(d.id) === String(idStr));
-                            if(index !== -1) {
-                                const session = data[index];
-                                if(session.platformsData && session.platformsData.length > 0) {
-                                    const pData = session.platformsData.find(p => p.plat === platName);
-                                    if(pData) { pData.img = compressedB64; pData.gmv = newGmv; }
-                                    session.totalGmv = session.platformsData.reduce((s, p) => s + p.gmv, 0);
-                                } else { session.img = compressedB64; session.gmv = newGmv; session.totalGmv = newGmv; }
+                            Swal.fire({title:'Mengunggah Gambar...', didOpen:()=>Swal.showLoading()});
+                            try {
+                                const newGmv = parseInt(res.value || 0); 
+                                const index = data.findIndex(d => String(d.id) === String(idStr));
                                 
-                                Swal.fire({title:'Menyimpan...', didOpen:()=>Swal.showLoading()});
-                                set(ref(db, `absensi_data/${index}`), session).then(() => {
+                                if(index !== -1) {
+                                    const session = data[index];
+                                    const hostName = session.host || 'admin';
+                                    const fileName = `bukti_ss/${hostName}_edit_${Date.now()}_${platName}.jpg`;
+                                    const imageRef = storageRef(storage, fileName);
+                                    
+                                    await uploadString(imageRef, compressedB64, 'data_url');
+                                    const newDownloadUrl = await getDownloadURL(imageRef);
+
+                                    if(session.platformsData && session.platformsData.length > 0) {
+                                        const pData = session.platformsData.find(p => p.plat === platName);
+                                        if(pData) { pData.img = newDownloadUrl; pData.gmv = newGmv; }
+                                        session.totalGmv = session.platformsData.reduce((s, p) => s + p.gmv, 0);
+                                    } else { 
+                                        session.img = newDownloadUrl; session.gmv = newGmv; session.totalGmv = newGmv; 
+                                    }
+                                    
+                                    await set(ref(db, `absensi_data/${index}`), session);
                                     Swal.fire('Tersimpan', 'Update Berhasil.', 'success');
-                                }).catch(err => Swal.fire('Error', 'Koneksi terputus', 'error'));
+                                }
+                            } catch(err) {
+                                console.error(err);
+                                Swal.fire('Error', 'Gagal mengunggah gambar baru', 'error');
                             }
                         }
                     });
@@ -1017,7 +1050,6 @@
         });
     }
 
-    // --- KEMBALIKAN KE SISTEM DOWNLOAD GAMBAR KE EXCEL LANGSUNG (BASE64) ---
     window.exportExcelFull = async function() {
         if(window.flattenedFilteredData.length===0) return Swal.fire('Kosong','Tidak ada data yang tersedia untuk didownload.','info');
         
@@ -1037,14 +1069,20 @@
             ws.columns = [{header:'Host',key:'host',width:20},{header:'Tanggal',key:'tgl',width:15},{header:'Platform',key:'plat',width:20},{header:'Jam Mulai',key:'mulai',width:15},{header:'Jam Selesai',key:'akhir',width:15},{header:'GMV (Rp)',key:'gmv',width:20},{header:'Durasi',key:'durasi',width:18},{header:'Bukti',key:'bukti',width:20}];
             const hR = ws.getRow(1); hR.font={bold:true,color:{argb:'FFFFFFFF'}}; hR.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF5A67D8'}}; hR.alignment={vertical:'middle',horizontal:'center'};
             
+            // Catatan: Karena kita sekarang menyimpan URL Storage (bukan Base64), kita tidak bisa langsung
+            // mengekspor gambar (URL) ke dalam Excel melalui FileSaver secara langsung tanpa mendownloadnya
+            // terlebih dahulu. Untuk menjaga performa Excel, kita akan menampilkan tautan URL gambarnya.
             dataToExport.forEach((x, i) => {
                 const rIdx = i+2; 
                 ws.addRow({host:x.host,tgl:x.tgl,plat:x.plat,mulai:x.mulai,akhir:x.akhir,gmv:x.gmvDisplay||0,durasi:formatDurasi(x.detik)}); 
-                ws.getRow(rIdx).height=55; ws.getRow(rIdx).alignment={vertical:'middle',horizontal:'left'}; ws.getCell(`F${rIdx}`).numFmt = '"Rp "* #,##0'; 
+                ws.getRow(rIdx).height=25; ws.getRow(rIdx).alignment={vertical:'middle',horizontal:'left'}; ws.getCell(`F${rIdx}`).numFmt = '"Rp "* #,##0'; 
                 
-                if(x.imgDisplay && x.imgDisplay.length>100) { 
-                    try { const imgId = wb.addImage({base64:x.imgDisplay.split(',')[1],extension:'png'}); ws.addImage(imgId, {tl:{col:7,row:rIdx-1},ext:{width:50,height:50}}); }catch(e){} 
-                } else ws.getCell(`H${rIdx}`).value = "Manual";
+                if(x.imgDisplay && x.imgDisplay.startsWith('http')) { 
+                    ws.getCell(`H${rIdx}`).value = { text: 'Lihat Gambar', hyperlink: x.imgDisplay };
+                    ws.getCell(`H${rIdx}`).font = { color: { argb: 'FF0563C1' }, underline: true };
+                } else {
+                    ws.getCell(`H${rIdx}`).value = "Manual";
+                }
             });
             ws.eachRow(row=>row.eachCell(cell=>cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}}));
             
