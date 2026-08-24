@@ -364,24 +364,23 @@
     </div>
 </div>
 
+<!-- PERHATIAN: HANYA FIREBASE APP DAN DATABASE SAJA. STORAGE SUDAH DIHAPUS. -->
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getDatabase, ref, onValue, set, update, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
-    import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyBUplQfjuqQxpGkA9d2ULdpzcrSBG1YftI",
       authDomain: "absensi-live-app.firebaseapp.com",
       databaseURL: "https://absensi-live-app-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "absensi-live-app",
-      storageBucket: "absensi-live-app.appspot.com", // PERBAIKAN: Format yang umum dan aman agar upload tidak hang
+      storageBucket: "absensi-live-app.firebasestorage.app",
       messagingSenderId: "283171583300",
       appId: "1:283171583300:web:7f2b5cd8c973a91bcc1311"
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
-    const storage = getStorage(app);
 
     let users = [{u:'admin', p:'admin', r:'admin'}];
     let data = []; let resetRequests = []; let filteredDataCache = []; let timerInterval;
@@ -426,19 +425,21 @@
         } catch(e) { console.error(e); Swal.fire('Error', 'Gagal menyimpan ke server.', 'error'); return false; }
     };
 
+    // FUNGSI KOMPRESI DITUNING ULANG AGAR TETAP TERBACA OCR NAMUN UKURAN SANGAT KECIL (<40KB)
     window.compressImage = function(file, callback) {
         const reader = new FileReader();
         reader.onload = function(e) {
             const img = new Image();
             img.onload = function() {
                 const canvas = document.createElement('canvas'); 
-                const MAX_DIM = 800; // PERBAIKAN: Diperbesar agar angka bisa terbaca oleh Tesseract
+                const MAX_DIM = 600; 
                 let width = img.width, height = img.height;
                 if (width > height && width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; }
                 else if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; }
                 canvas.width = width; canvas.height = height;
                 const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
-                callback(canvas.toDataURL('image/jpeg', 0.5)); 
+                // Kompres kualitas menjadi 0.4 agar file di bawah 40kb sehingga bisa ditampung RTDB
+                callback(canvas.toDataURL('image/jpeg', 0.4)); 
             }
             img.src = e.target.result;
         }
@@ -533,7 +534,6 @@
         }
     });
 
-    // PERBAIKAN: Gunakan compressedB64 langsung agar Browser tidak lag & crash
     window.prosesOCR = function(input, plat) {
         const file = input.files[0]; if(!file) return;
         const statusEl = document.getElementById(`status_${plat}`), inputGmv = document.getElementById(`gmv_${plat}`);
@@ -548,7 +548,6 @@
             document.getElementById(`pz_${plat}`).style.borderColor = 'var(--success)';
             
             statusEl.innerHTML = '⏳ Memindai (AI)...';
-            // PERBAIKAN: Pass compressedB64 (file ukuran 250kb) ke OCR, bukan file ori yang berat
             Tesseract.recognize(compressedB64, 'ind+eng', { logger: m => { if(m.status === 'recognizing text') statusEl.innerHTML = `⏳ ${Math.round(m.progress * 100)}%`; } })
             .then(({ data: { text } }) => {
                 const regex = /(?:Rp|IDR|\$)?\s*([0-9]{1,3}(?:\.[0-9]{3})*(?:\,[0-9]{1,2})?)/gi; let match; let highest = 0;
@@ -563,13 +562,14 @@
         });
     }
 
+    // MODIFIKASI: DIBUAT LANGSUNG MENYIMPAN KE REALTIME DB SAJA
     window.selesai = async function() {
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem masih memuat data server.', 'warning');
         const u = localStorage.getItem('activeUser'), sess = JSON.parse(localStorage.getItem('sess_'+u));
         const missing = sess.plats.filter(p => !window.sessionImages[p]);
         if(missing.length > 0) return Swal.fire({icon:'warning', title: 'Belum Lengkap!', text: `Harap upload SS untuk: ${missing.join(', ')}`});
         
-        Swal.fire({ title: 'Mengunggah Data...', text: 'Mengirim gambar ke server, JANGAN tutup aplikasi!', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+        Swal.fire({ title: 'Menyimpan Data...', text: 'Memproses laporan absensi...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
         
         let platformsData = [], totalGmvAccumulated = 0;
         
@@ -577,15 +577,9 @@
             for (const p of sess.plats) {
                 const gmvVal = parseInt(document.getElementById(`gmv_${p}`).value || 0); 
                 totalGmvAccumulated += gmvVal; 
-                
+                // Gambar dalam format base64 langsung diproses, TIDAK usah tunggu upload firebase storage yang error.
                 const base64Img = window.sessionImages[p];
-                const fileName = `bukti_ss/${u}_${Date.now()}_${p}.jpg`;
-                const imageRef = storageRef(storage, fileName);
-                
-                await uploadString(imageRef, base64Img, 'data_url');
-                const downloadUrl = await getDownloadURL(imageRef);
-                
-                platformsData.push({ plat: p, img: downloadUrl, gmv: gmvVal }); 
+                platformsData.push({ plat: p, img: base64Img, gmv: gmvVal }); 
             }
 
             const end = Date.now(), detik = Math.floor((end - sess.start) / 1000);
@@ -596,17 +590,19 @@
             await set(ref(db, `absensi_data/${newIndex}`), newRecord);
             
             localStorage.removeItem('sess_'+u); clearInterval(timerInterval); window.sessionImages = {}; document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; 
+            
             Swal.fire({icon:'success',title:'Disimpan!'}); 
+            renderHistory();
             
         } catch(err) {
             console.error(err);
-            Swal.fire('Error', 'Gagal mengunggah ke server. Pastikan sinyal stabil.', 'error');
+            Swal.fire('Error', 'Gagal menyimpan ke server.', 'error');
         }
     }
 
     window.lihatFoto = function(imgSrc) { Swal.fire({ imageUrl: imgSrc, imageAlt: 'Bukti SS', showConfirmButton: false, width: 'auto', padding: '1em', background: 'transparent', backdrop: 'rgba(0,0,0,0.85)' }); }
 
-    // PERBAIKAN: Gunakan Catch block agar loading Swal tidak stuck di layar jika Tesseract hang
+    // MODIFIKASI: DIBUAT LANGSUNG MENYIMPAN KE REALTIME DB SAJA
     window.editFoto = function(idStr, platName) {
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
         const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*';
@@ -618,26 +614,20 @@
                 const lanjutSimpan = (highest) => {
                     Swal.fire({ title: 'Konfirmasi GMV Baru', text: `Platform: ${platName}. Edit jika AI salah.`, input: 'number', inputValue: highest > 100 ? highest : '', imageUrl: compressedB64, imageHeight: 200, showCancelButton: true, confirmButtonText: 'Simpan Perubahan' }).then(async res => {
                         if(res.isConfirmed) {
-                            Swal.fire({title:'Mengunggah Gambar...', didOpen:()=>Swal.showLoading()});
+                            Swal.fire({title:'Menyimpan Data...', didOpen:()=>Swal.showLoading()});
                             try {
                                 const newGmv = parseInt(res.value || 0); 
                                 const index = data.findIndex(d => String(d.id) === String(idStr));
                                 
                                 if(index !== -1) {
                                     const session = data[index];
-                                    const hostName = session.host || 'admin';
-                                    const fileName = `bukti_ss/${hostName}_edit_${Date.now()}_${platName}.jpg`;
-                                    const imageRef = storageRef(storage, fileName);
                                     
-                                    await uploadString(imageRef, compressedB64, 'data_url');
-                                    const newDownloadUrl = await getDownloadURL(imageRef);
-
                                     if(session.platformsData && session.platformsData.length > 0) {
                                         const pData = session.platformsData.find(p => p.plat === platName);
-                                        if(pData) { pData.img = newDownloadUrl; pData.gmv = newGmv; }
+                                        if(pData) { pData.img = compressedB64; pData.gmv = newGmv; }
                                         session.totalGmv = session.platformsData.reduce((s, p) => s + p.gmv, 0);
                                     } else { 
-                                        session.img = newDownloadUrl; session.gmv = newGmv; session.totalGmv = newGmv; 
+                                        session.img = compressedB64; session.gmv = newGmv; session.totalGmv = newGmv; 
                                     }
                                     
                                     await set(ref(db, `absensi_data/${index}`), session);
@@ -645,7 +635,7 @@
                                 }
                             } catch(err) {
                                 console.error(err);
-                                Swal.fire('Error', 'Gagal mengunggah gambar baru', 'error');
+                                Swal.fire('Error', 'Gagal menyimpan gambar baru', 'error');
                             }
                         }
                     });
@@ -658,7 +648,7 @@
                     lanjutSimpan(highest);
                 }).catch(err => {
                     console.warn("Tesseract gagal memindai", err);
-                    lanjutSimpan(0); // Tetap lanjut ke tahap simpan meskipun OCR gagal agar tidak stuck
+                    lanjutSimpan(0); 
                 });
             });
         }; input.click();
@@ -1097,12 +1087,9 @@
                 ws.addRow({host:x.host,tgl:x.tgl,plat:x.plat,mulai:x.mulai,akhir:x.akhir,gmv:x.gmvDisplay||0,durasi:formatDurasi(x.detik)}); 
                 ws.getRow(rIdx).height=25; ws.getRow(rIdx).alignment={vertical:'middle',horizontal:'left'}; ws.getCell(`F${rIdx}`).numFmt = '"Rp "* #,##0'; 
                 
-                if(x.imgDisplay && x.imgDisplay.startsWith('http')) { 
-                    ws.getCell(`H${rIdx}`).value = { text: 'Lihat Gambar', hyperlink: x.imgDisplay };
-                    ws.getCell(`H${rIdx}`).font = { color: { argb: 'FF0563C1' }, underline: true };
-                } else {
-                    ws.getCell(`H${rIdx}`).value = "Manual";
-                }
+                // Hanya memberikan keterangan visual di excel agar ukuran file excel tidak bengkak
+                ws.getCell(`H${rIdx}`).value = "Gambar Tersimpan";
+                ws.getCell(`H${rIdx}`).font = { color: { argb: 'FF10B981' }, italic: true };
             });
             ws.eachRow(row=>row.eachCell(cell=>cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}}));
             
