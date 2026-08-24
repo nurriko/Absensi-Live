@@ -364,10 +364,9 @@
     </div>
 </div>
 
-<!-- PERHATIAN: HANYA FIREBASE APP DAN DATABASE SAJA. STORAGE SUDAH DIHAPUS. -->
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getDatabase, ref, onValue, set, update, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+    import { getDatabase, ref, onValue, set, update, remove, push } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyBUplQfjuqQxpGkA9d2ULdpzcrSBG1YftI",
@@ -383,7 +382,7 @@
     const db = getDatabase(app);
 
     let users = [{u:'admin', p:'admin', r:'admin'}];
-    let data = []; let resetRequests = []; let filteredDataCache = []; let timerInterval;
+    let data = []; let resetRequests = []; let timerInterval;
     window.sessionImages = {};
     window.flattenedFilteredData = [];
     
@@ -417,34 +416,52 @@
         if(!document.getElementById('adminPage').classList.contains('hidden')) renderResetRequests();
     });
 
-    const sync = async () => { 
-        if(!isDataLoaded || !isUsersLoaded) { Swal.fire('⏳ Tunggu Sebentar', 'Sistem sedang menyinkronkan data dari server.', 'warning'); return false; }
-        try {
-            await Promise.all([ set(ref(db, 'users'), users), set(ref(db, 'absensi_data'), data), set(ref(db, 'reset_requests'), resetRequests) ]);
-            return true;
-        } catch(e) { console.error(e); Swal.fire('Error', 'Gagal menyimpan ke server.', 'error'); return false; }
-    };
-
-    // FUNGSI KOMPRESI DITUNING ULANG AGAR TETAP TERBACA OCR NAMUN UKURAN SANGAT KECIL (<40KB)
+    // FUNGSI KOMPRESI EKSTREM: Mengecilkan gambar agar tidak bikin Firebase ngadat
     window.compressImage = function(file, callback) {
         const reader = new FileReader();
         reader.onload = function(e) {
             const img = new Image();
             img.onload = function() {
                 const canvas = document.createElement('canvas'); 
-                const MAX_DIM = 600; 
+                const MAX_DIM = 400; // DIKECILKAN LAGI
                 let width = img.width, height = img.height;
                 if (width > height && width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; }
                 else if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; }
                 canvas.width = width; canvas.height = height;
                 const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
-                // Kompres kualitas menjadi 0.4 agar file di bawah 40kb sehingga bisa ditampung RTDB
-                callback(canvas.toDataURL('image/jpeg', 0.4)); 
+                
+                // QUALITY SANGAT RENDAH (0.3) AGAR UKURAN FILE SANGAT KECIL (Dibawah 20KB)
+                callback(canvas.toDataURL('image/jpeg', 0.3)); 
             }
             img.src = e.target.result;
         }
         reader.readAsDataURL(file);
     }
+
+    // FUNGSI TIMEOUT BANTUAN UNTUK MENCEGAH STUCK
+    const promiseWithTimeout = (promise, ms, timeoutMessage = 'Waktu habis, cek koneksi internet.') => {
+        let timeoutHandle;
+        const timeoutPromise = new Promise((_, reject) => {
+            timeoutHandle = setTimeout(() => reject(new Error(timeoutMessage)), ms);
+        });
+        return Promise.race([
+            promise.then((res) => { clearTimeout(timeoutHandle); return res; }), 
+            timeoutPromise
+        ]);
+    };
+
+    const sync = async () => { 
+        if(!isDataLoaded || !isUsersLoaded) { Swal.fire('⏳ Tunggu Sebentar', 'Sistem sedang menyinkronkan data dari server.', 'warning'); return false; }
+        try {
+            const savePromises = Promise.all([ set(ref(db, 'users'), users), set(ref(db, 'absensi_data'), data), set(ref(db, 'reset_requests'), resetRequests) ]);
+            await promiseWithTimeout(savePromises, 10000, "Gagal sinkron. Cek aturan (Rules) database Anda.");
+            return true;
+        } catch(e) { 
+            console.error(e); 
+            Swal.fire('Error Penyimpanan', e.message || 'Gagal menyimpan ke server.', 'error'); 
+            return false; 
+        }
+    };
 
     window.togglePassword = function(inputId, btn) {
         const input = document.getElementById(inputId);
@@ -562,14 +579,14 @@
         });
     }
 
-    // MODIFIKASI: DIBUAT LANGSUNG MENYIMPAN KE REALTIME DB SAJA
+    // MODIFIKASI: DILENGKAPI TIMEOUT AGAR JIKA ERROR BISA LANGSUNG MUNCUL PESAN BUKAN STUCK
     window.selesai = async function() {
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem masih memuat data server.', 'warning');
         const u = localStorage.getItem('activeUser'), sess = JSON.parse(localStorage.getItem('sess_'+u));
         const missing = sess.plats.filter(p => !window.sessionImages[p]);
         if(missing.length > 0) return Swal.fire({icon:'warning', title: 'Belum Lengkap!', text: `Harap upload SS untuk: ${missing.join(', ')}`});
         
-        Swal.fire({ title: 'Menyimpan Data...', text: 'Memproses laporan absensi...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+        Swal.fire({ title: 'Menyimpan Data...', text: 'Mengirim ke server...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
         
         let platformsData = [], totalGmvAccumulated = 0;
         
@@ -577,32 +594,36 @@
             for (const p of sess.plats) {
                 const gmvVal = parseInt(document.getElementById(`gmv_${p}`).value || 0); 
                 totalGmvAccumulated += gmvVal; 
-                // Gambar dalam format base64 langsung diproses, TIDAK usah tunggu upload firebase storage yang error.
                 const base64Img = window.sessionImages[p];
                 platformsData.push({ plat: p, img: base64Img, gmv: gmvVal }); 
             }
 
             const end = Date.now(), detik = Math.floor((end - sess.start) / 1000);
+            const generatedId = Date.now() + "_" + Math.floor(Math.random()*1000);
             
-            const newRecord = { id: Date.now() + Math.random(), host: u, plat: sess.plats.join(', '), timestamp: sess.start, tgl: new Date(sess.start).toLocaleDateString('en-CA'), mulai: new Date(sess.start).toLocaleTimeString('en-GB'), akhir: new Date(end).toLocaleTimeString('en-GB'), detik: detik, totalGmv: totalGmvAccumulated, platformsData: platformsData };
+            const newRecord = { id: generatedId, host: u, plat: sess.plats.join(', '), timestamp: sess.start, tgl: new Date(sess.start).toLocaleDateString('en-CA'), mulai: new Date(sess.start).toLocaleTimeString('en-GB'), akhir: new Date(end).toLocaleTimeString('en-GB'), detik: detik, totalGmv: totalGmvAccumulated, platformsData: platformsData };
             
-            const newIndex = data.length;
-            await set(ref(db, `absensi_data/${newIndex}`), newRecord);
+            // SIMPAN DATA MENGGUNAKAN PUSH (Lebih aman dari bentrokan)
+            const saveOperation = push(ref(db, 'absensi_data'), newRecord);
             
+            // TIMEOUT 10 DETIK AGAR TIDAK STUCK
+            await promiseWithTimeout(saveOperation, 10000, "Database menolak atau koneksi terputus. Pastikan bagian Rules di Firebase sudah benar.");
+            
+            // JIKA SUKSES
             localStorage.removeItem('sess_'+u); clearInterval(timerInterval); window.sessionImages = {}; document.querySelectorAll('.host-plat-cb').forEach(cb => cb.checked = false); document.getElementById('hostPlatSelectedText').innerText = "Pilih Platform..."; 
             
             Swal.fire({icon:'success',title:'Disimpan!'}); 
-            renderHistory();
             
         } catch(err) {
             console.error(err);
-            Swal.fire('Error', 'Gagal menyimpan ke server.', 'error');
+            // INI AKAN MUNCUL JIKA RULES SALAH ATAU KONEKSI HILANG
+            Swal.fire('Gagal Menyimpan', err.message || 'Terjadi kesalahan sistem.', 'error');
         }
     }
 
     window.lihatFoto = function(imgSrc) { Swal.fire({ imageUrl: imgSrc, imageAlt: 'Bukti SS', showConfirmButton: false, width: 'auto', padding: '1em', background: 'transparent', backdrop: 'rgba(0,0,0,0.85)' }); }
 
-    // MODIFIKASI: DIBUAT LANGSUNG MENYIMPAN KE REALTIME DB SAJA
+    // MODIFIKASI: DILENGKAPI TIMEOUT
     window.editFoto = function(idStr, platName) {
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
         const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*';
@@ -617,25 +638,40 @@
                             Swal.fire({title:'Menyimpan Data...', didOpen:()=>Swal.showLoading()});
                             try {
                                 const newGmv = parseInt(res.value || 0); 
-                                const index = data.findIndex(d => String(d.id) === String(idStr));
                                 
-                                if(index !== -1) {
-                                    const session = data[index];
-                                    
-                                    if(session.platformsData && session.platformsData.length > 0) {
-                                        const pData = session.platformsData.find(p => p.plat === platName);
+                                // Cari key firebase yang aslinya
+                                let foundKey = null;
+                                let updatedData = null;
+                                
+                                onValue(ref(db, 'absensi_data'), (snapshot) => {
+                                   snapshot.forEach((childSnapshot) => {
+                                      const childData = childSnapshot.val();
+                                      if(String(childData.id) === String(idStr)) {
+                                          foundKey = childSnapshot.key;
+                                          updatedData = childData;
+                                      }
+                                   });
+                                }, { onlyOnce: true });
+
+                                if(foundKey && updatedData) {
+                                    if(updatedData.platformsData && updatedData.platformsData.length > 0) {
+                                        const pData = updatedData.platformsData.find(p => p.plat === platName);
                                         if(pData) { pData.img = compressedB64; pData.gmv = newGmv; }
-                                        session.totalGmv = session.platformsData.reduce((s, p) => s + p.gmv, 0);
+                                        updatedData.totalGmv = updatedData.platformsData.reduce((s, p) => s + p.gmv, 0);
                                     } else { 
-                                        session.img = compressedB64; session.gmv = newGmv; session.totalGmv = newGmv; 
+                                        updatedData.img = compressedB64; updatedData.gmv = newGmv; updatedData.totalGmv = newGmv; 
                                     }
                                     
-                                    await set(ref(db, `absensi_data/${index}`), session);
+                                    const updateOperation = set(ref(db, `absensi_data/${foundKey}`), updatedData);
+                                    await promiseWithTimeout(updateOperation, 10000, "Database menolak/koneksi terputus.");
+                                    
                                     Swal.fire('Tersimpan', 'Update Berhasil.', 'success');
+                                } else {
+                                    Swal.fire('Gagal', 'Data aslinya tidak ditemukan di server.', 'error');
                                 }
                             } catch(err) {
                                 console.error(err);
-                                Swal.fire('Error', 'Gagal menyimpan gambar baru', 'error');
+                                Swal.fire('Gagal Menyimpan', err.message || 'Terjadi kesalahan sistem.', 'error');
                             }
                         }
                     });
@@ -654,13 +690,24 @@
         }; input.click();
     }
 
+    // MODIFIKASI: DILENGKAPI PENCARIAN KEY FIREBASE YANG BENAR
     window.editGmvAdmin = function(idStr, platName) {
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
-        const index = data.findIndex(d => String(d.id) === String(idStr)); if(index === -1) return;
-        const session = data[index];
+        
+        let foundKey = null;
+        let session = null;
+        onValue(ref(db, 'absensi_data'), (snapshot) => {
+           snapshot.forEach((childSnapshot) => {
+              const childData = childSnapshot.val();
+              if(String(childData.id) === String(idStr)) { foundKey = childSnapshot.key; session = childData; }
+           });
+        }, { onlyOnce: true });
+
+        if(!foundKey) return Swal.fire('Gagal', 'Data tidak ditemukan', 'error');
+
         let currentGmv = session.platformsData ? (session.platformsData.find(p => p.plat === platName)?.gmv || 0) : (session.totalGmv || session.gmv || 0);
 
-        Swal.fire({ title: `Koreksi GMV (${platName})`, input: 'number', inputValue: currentGmv, showCancelButton: true, confirmButtonText: 'Simpan' }).then((res) => {
+        Swal.fire({ title: `Koreksi GMV (${platName})`, input: 'number', inputValue: currentGmv, showCancelButton: true, confirmButtonText: 'Simpan' }).then(async (res) => {
             if (res.isConfirmed) {
                 const newGmv = parseInt(res.value || 0);
                 if(session.platformsData && session.platformsData.length > 0) {
@@ -670,24 +717,38 @@
                 } else { session.gmv = newGmv; session.totalGmv = newGmv; }
                 
                 Swal.fire({title:'Menyimpan...', didOpen:()=>Swal.showLoading()});
-                set(ref(db, `absensi_data/${index}`), session).then(() => {
+                
+                try {
+                    await promiseWithTimeout(set(ref(db, `absensi_data/${foundKey}`), session), 10000, "Waktu habis");
                     Swal.fire('Berhasil!', '', 'success');
-                });
+                } catch(e) {
+                    Swal.fire('Error', e.message, 'error');
+                }
             }
         });
     }
 
+    // MODIFIKASI: DILENGKAPI PENCARIAN KEY FIREBASE YANG BENAR
     window.editWaktuAdmin = function(idStr) {
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
-        const index = data.findIndex(d => String(d.id) === String(idStr)); if(index === -1) return;
-        const session = data[index];
+        
+        let foundKey = null;
+        let session = null;
+        onValue(ref(db, 'absensi_data'), (snapshot) => {
+           snapshot.forEach((childSnapshot) => {
+              const childData = childSnapshot.val();
+              if(String(childData.id) === String(idStr)) { foundKey = childSnapshot.key; session = childData; }
+           });
+        }, { onlyOnce: true });
+        
+        if(!foundKey) return Swal.fire('Gagal', 'Data tidak ditemukan', 'error');
 
         Swal.fire({
             title: 'Edit Waktu',
             html: `<div style="text-align:left; margin-top:15px;"><label style="font-size:0.85rem; font-weight:bold;">Jam Mulai (HH:mm:ss)</label><input id="swal-mulai" class="swal2-input" style="font-family:monospace; margin-bottom:15px;" value="${session.mulai}"><label style="font-size:0.85rem; font-weight:bold;">Jam Selesai (HH:mm:ss)</label><input id="swal-akhir" class="swal2-input" style="font-family:monospace;" value="${session.akhir}"></div><small style="color:var(--warning); display:block; margin-top:10px;">Durasi akan otomatis dihitung ulang.</small>`,
             showCancelButton: true, confirmButtonText: 'Simpan',
             preConfirm: () => { return { mMulai: document.getElementById('swal-mulai').value.trim(), mAkhir: document.getElementById('swal-akhir').value.trim() }; }
-        }).then((res) => {
+        }).then(async (res) => {
             if (res.isConfirmed) {
                 const fMulai = res.value.mMulai.length === 5 ? res.value.mMulai + ':00' : res.value.mMulai;
                 const fAkhir = res.value.mAkhir.length === 5 ? res.value.mAkhir + ':00' : res.value.mAkhir;
@@ -697,9 +758,12 @@
                 session.mulai = fMulai; session.akhir = fAkhir; session.detik = Math.floor((endTs - startTs) / 1000); session.timestamp = startTs;
                 
                 Swal.fire({title:'Menyimpan...', didOpen:()=>Swal.showLoading()});
-                set(ref(db, `absensi_data/${index}`), session).then(() => {
+                try {
+                    await promiseWithTimeout(set(ref(db, `absensi_data/${foundKey}`), session), 10000, "Waktu habis");
                     Swal.fire('Berhasil!', '', 'success');
-                });
+                } catch(e) {
+                    Swal.fire('Error', e.message, 'error');
+                }
             }
         });
     }
@@ -725,6 +789,7 @@
             confirmButtonText: 'Ya, Hapus!'
         }).then((res) => {
             if(res.isConfirmed) {
+                // Filter ulang data baru yang mau disave
                 data = data.filter(d => !uniqueIds.includes(String(d.id)));
                 Swal.fire({title:'Menghapus...', didOpen:()=>Swal.showLoading()});
                 sync().then((ok) => {
@@ -836,13 +901,12 @@
     window.prosesUploadManual = function() {
         const fI = document.getElementById('manualUploadFile'); if(fI.files.length===0) return Swal.fire('Error','Pilih file Excel!','warning');
         const r = new FileReader();
-        r.onload = function(e) {
+        r.onload = async function(e) {
             const jD = XLSX.utils.sheet_to_json(XLSX.read(new Uint8Array(e.target.result), {type:'array'}).Sheets[XLSX.read(new Uint8Array(e.target.result), {type:'array'}).SheetNames[0]], {raw:false});
             if(jD.length===0) return Swal.fire('Error','Excel kosong.','error');
             let b = 0; const dI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=";
             
             let updates = {};
-            let nextIdx = data.length;
 
             function pTime(v) {
                 if(!v) return {h:0, m:0, s:0};
@@ -900,16 +964,20 @@
                     let fA = `${String(eT.h).padStart(2,'0')}:${String(eT.m).padStart(2,'0')}:${String(eT.s).padStart(2,'0')}`;
                     
                     if(!isNaN(ts)) { 
-                        updates[`absensi_data/${nextIdx}`] = { id:Date.now()+Math.random(), host:h, plat:p, timestamp:ts, tgl:fTgl, mulai:fM, akhir:fA, detik:dtk, img:dI, totalGmv:g }; 
-                        nextIdx++; b++; 
+                        let tempId = Date.now()+Math.random();
+                        updates[`absensi_data/${tempId}`] = { id:tempId, host:h, plat:p, timestamp:ts, tgl:fTgl, mulai:fM, akhir:fA, detik:dtk, img:dI, totalGmv:g }; 
+                        b++; 
                     }
                 }
             });
             if(b>0){ 
                 Swal.fire({title:'Menyimpan ke Server...', didOpen:()=>Swal.showLoading()}); 
-                update(ref(db), updates).then(() => {
+                try {
+                    await promiseWithTimeout(update(ref(db), updates), 10000, "Timeout dari server.");
                     fI.value=''; Swal.fire('Sukses!',`${b} baris ditambahkan.`,'success'); 
-                }).catch(err => Swal.fire('Error','Gagal menyimpan data ke server.','error'));
+                } catch(err) {
+                    Swal.fire('Error', err.message || 'Gagal menyimpan data ke server.', 'error');
+                }
             } else Swal.fire('Gagal','Tidak ada baris valid. Pastikan header sesuai template.','error');
         }; r.readAsArrayBuffer(fI.files[0]);
     }
