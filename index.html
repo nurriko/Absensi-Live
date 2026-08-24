@@ -374,7 +374,7 @@
       authDomain: "absensi-live-app.firebaseapp.com",
       databaseURL: "https://absensi-live-app-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "absensi-live-app",
-      storageBucket: "absensi-live-app.firebasestorage.app",
+      storageBucket: "absensi-live-app.appspot.com", // PERBAIKAN: Format yang umum dan aman agar upload tidak hang
       messagingSenderId: "283171583300",
       appId: "1:283171583300:web:7f2b5cd8c973a91bcc1311"
     };
@@ -432,13 +432,13 @@
             const img = new Image();
             img.onload = function() {
                 const canvas = document.createElement('canvas'); 
-                const MAX_DIM = 250;
+                const MAX_DIM = 800; // PERBAIKAN: Diperbesar agar angka bisa terbaca oleh Tesseract
                 let width = img.width, height = img.height;
                 if (width > height && width > MAX_DIM) { height *= MAX_DIM / width; width = MAX_DIM; }
                 else if (height > MAX_DIM) { width *= MAX_DIM / height; height = MAX_DIM; }
                 canvas.width = width; canvas.height = height;
                 const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
-                callback(canvas.toDataURL('image/jpeg', 0.3)); 
+                callback(canvas.toDataURL('image/jpeg', 0.5)); 
             }
             img.src = e.target.result;
         }
@@ -533,21 +533,36 @@
         }
     });
 
+    // PERBAIKAN: Gunakan compressedB64 langsung agar Browser tidak lag & crash
     window.prosesOCR = function(input, plat) {
         const file = input.files[0]; if(!file) return;
-        window.compressImage(file, function(compressedB64) {
-            window.sessionImages[plat] = compressedB64; document.getElementById(`preview_${plat}`).src = compressedB64; document.getElementById(`preview_${plat}`).style.display = 'block'; document.getElementById(`pzt_${plat}`).style.display = 'none'; document.getElementById(`pz_${plat}`).style.borderStyle = 'solid'; document.getElementById(`pz_${plat}`).style.borderColor = 'var(--success)';
-        });
         const statusEl = document.getElementById(`status_${plat}`), inputGmv = document.getElementById(`gmv_${plat}`);
-        statusEl.innerHTML = '⏳ Scanning GMV...'; statusEl.style.color = 'var(--warning)';
-        Tesseract.recognize(file, 'ind+eng', { logger: m => { if(m.status === 'recognizing text') statusEl.innerHTML = `⏳ ${Math.round(m.progress * 100)}%`; } }).then(({ data: { text } }) => {
-            const regex = /(?:Rp|IDR|\$)?\s*([0-9]{1,3}(?:\.[0-9]{3})*(?:\,[0-9]{1,2})?)/gi; let match; let highest = 0;
-            while ((match = regex.exec(text)) !== null) { let val = parseInt(match[1].replace(/\./g, '').replace(/\,/g, '')); if(!isNaN(val) && val > highest) highest = val; }
-            if(highest > 100) { inputGmv.value = highest; statusEl.innerHTML = '✅ Terdeteksi otomatis!'; statusEl.style.color = 'var(--success)'; } else { statusEl.innerHTML = '⚠️ Ketik GMV manual.'; }
-        }).catch(err => { statusEl.innerHTML = '❌ Gagal. Ketik manual.'; statusEl.style.color = 'var(--accent)'; });
+        statusEl.innerHTML = '⏳ Menyiapkan gambar...'; statusEl.style.color = 'var(--warning)';
+
+        window.compressImage(file, function(compressedB64) {
+            window.sessionImages[plat] = compressedB64; 
+            document.getElementById(`preview_${plat}`).src = compressedB64; 
+            document.getElementById(`preview_${plat}`).style.display = 'block'; 
+            document.getElementById(`pzt_${plat}`).style.display = 'none'; 
+            document.getElementById(`pz_${plat}`).style.borderStyle = 'solid'; 
+            document.getElementById(`pz_${plat}`).style.borderColor = 'var(--success)';
+            
+            statusEl.innerHTML = '⏳ Memindai (AI)...';
+            // PERBAIKAN: Pass compressedB64 (file ukuran 250kb) ke OCR, bukan file ori yang berat
+            Tesseract.recognize(compressedB64, 'ind+eng', { logger: m => { if(m.status === 'recognizing text') statusEl.innerHTML = `⏳ ${Math.round(m.progress * 100)}%`; } })
+            .then(({ data: { text } }) => {
+                const regex = /(?:Rp|IDR|\$)?\s*([0-9]{1,3}(?:\.[0-9]{3})*(?:\,[0-9]{1,2})?)/gi; let match; let highest = 0;
+                while ((match = regex.exec(text)) !== null) { let val = parseInt(match[1].replace(/\./g, '').replace(/\,/g, '')); if(!isNaN(val) && val > highest) highest = val; }
+                if(highest > 100) { inputGmv.value = highest; statusEl.innerHTML = '✅ Terbaca otomatis!'; statusEl.style.color = 'var(--success)'; } 
+                else { statusEl.innerHTML = '⚠️ Ketik GMV manual.'; }
+            }).catch(err => { 
+                console.warn('OCR Gagal:', err);
+                statusEl.innerHTML = '❌ OCR Gagal. Ketik manual.'; 
+                statusEl.style.color = 'var(--accent)'; 
+            });
+        });
     }
 
-    // MODIFIKASI: fungsi selesai() menggunakan Firebase Storage
     window.selesai = async function() {
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem masih memuat data server.', 'warning');
         const u = localStorage.getItem('activeUser'), sess = JSON.parse(localStorage.getItem('sess_'+u));
@@ -585,13 +600,13 @@
             
         } catch(err) {
             console.error(err);
-            Swal.fire('Error', 'Gagal mengunggah ke server. Coba lagi.', 'error');
+            Swal.fire('Error', 'Gagal mengunggah ke server. Pastikan sinyal stabil.', 'error');
         }
     }
 
     window.lihatFoto = function(imgSrc) { Swal.fire({ imageUrl: imgSrc, imageAlt: 'Bukti SS', showConfirmButton: false, width: 'auto', padding: '1em', background: 'transparent', backdrop: 'rgba(0,0,0,0.85)' }); }
 
-    // MODIFIKASI: fungsi editFoto() menggunakan Firebase Storage
+    // PERBAIKAN: Gunakan Catch block agar loading Swal tidak stuck di layar jika Tesseract hang
     window.editFoto = function(idStr, platName) {
         if(!isDataLoaded) return Swal.fire('⏳ Tunggu', 'Sistem sedang menyinkronkan.', 'warning');
         const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*';
@@ -599,10 +614,8 @@
             const file = e.target.files[0]; if(!file) return;
             window.compressImage(file, function(compressedB64) {
                 Swal.fire({ title: 'Memindai Gambar...', text: 'AI membaca GMV baru.', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
-                Tesseract.recognize(file, 'ind+eng').then(({ data: { text } }) => {
-                    const regex = /(?:Rp|IDR|\$)?\s*([0-9]{1,3}(?:\.[0-9]{3})*(?:\,[0-9]{1,2})?)/gi; let match; let highest = 0;
-                    while ((match = regex.exec(text)) !== null) { let val = parseInt(match[1].replace(/\./g, '').replace(/\,/g, '')); if(!isNaN(val) && val > highest) highest = val; }
-                    
+                
+                const lanjutSimpan = (highest) => {
                     Swal.fire({ title: 'Konfirmasi GMV Baru', text: `Platform: ${platName}. Edit jika AI salah.`, input: 'number', inputValue: highest > 100 ? highest : '', imageUrl: compressedB64, imageHeight: 200, showCancelButton: true, confirmButtonText: 'Simpan Perubahan' }).then(async res => {
                         if(res.isConfirmed) {
                             Swal.fire({title:'Mengunggah Gambar...', didOpen:()=>Swal.showLoading()});
@@ -636,7 +649,17 @@
                             }
                         }
                     });
-                }).catch(() => Swal.fire('Error', 'Gagal memindai gambar.', 'error'));
+                };
+
+                Tesseract.recognize(compressedB64, 'ind+eng')
+                .then(({ data: { text } }) => {
+                    const regex = /(?:Rp|IDR|\$)?\s*([0-9]{1,3}(?:\.[0-9]{3})*(?:\,[0-9]{1,2})?)/gi; let match; let highest = 0;
+                    while ((match = regex.exec(text)) !== null) { let val = parseInt(match[1].replace(/\./g, '').replace(/\,/g, '')); if(!isNaN(val) && val > highest) highest = val; }
+                    lanjutSimpan(highest);
+                }).catch(err => {
+                    console.warn("Tesseract gagal memindai", err);
+                    lanjutSimpan(0); // Tetap lanjut ke tahap simpan meskipun OCR gagal agar tidak stuck
+                });
             });
         }; input.click();
     }
@@ -1069,9 +1092,6 @@
             ws.columns = [{header:'Host',key:'host',width:20},{header:'Tanggal',key:'tgl',width:15},{header:'Platform',key:'plat',width:20},{header:'Jam Mulai',key:'mulai',width:15},{header:'Jam Selesai',key:'akhir',width:15},{header:'GMV (Rp)',key:'gmv',width:20},{header:'Durasi',key:'durasi',width:18},{header:'Bukti',key:'bukti',width:20}];
             const hR = ws.getRow(1); hR.font={bold:true,color:{argb:'FFFFFFFF'}}; hR.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF5A67D8'}}; hR.alignment={vertical:'middle',horizontal:'center'};
             
-            // Catatan: Karena kita sekarang menyimpan URL Storage (bukan Base64), kita tidak bisa langsung
-            // mengekspor gambar (URL) ke dalam Excel melalui FileSaver secara langsung tanpa mendownloadnya
-            // terlebih dahulu. Untuk menjaga performa Excel, kita akan menampilkan tautan URL gambarnya.
             dataToExport.forEach((x, i) => {
                 const rIdx = i+2; 
                 ws.addRow({host:x.host,tgl:x.tgl,plat:x.plat,mulai:x.mulai,akhir:x.akhir,gmv:x.gmvDisplay||0,durasi:formatDurasi(x.detik)}); 
